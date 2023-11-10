@@ -1,15 +1,16 @@
 import time
 import psycopg2
 import psycopg2.extras
-import torch
-import datetime
-import pandas as pd
+# import torch
+# import datetime
+# import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
 import config as conf
 
 if __name__ == "__main__":
 
+    # Open connection to PUBMED database on postgreSQL server, create connection
     con = psycopg2.connect(f'dbname={conf.DB_NAME} user={conf.USER} password={conf.PASSWD} host={conf.HOST}')
     cur = con.cursor()
 
