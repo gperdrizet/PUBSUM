@@ -3,7 +3,8 @@ import pandas as pd
 import config as conf
 
 class Results:
-    '''Class to hold object related to the llm'''
+    '''Class to hold objects related to summarization
+    benchmarking results'''
 
     def __init__(self):
 
@@ -25,7 +26,7 @@ class Results:
         # Read existing results if any and concatenate new results
         if os.path.exists(self.output_file):
             old_results_df = pd.read_csv(self.output_file)
-            results_df = pd.concat(old_results_df, results_df)
+            results_df = pd.concat([old_results_df, results_df])
 
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
