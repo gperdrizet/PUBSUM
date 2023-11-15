@@ -57,3 +57,13 @@ PASSWD = secrets.passwd
 # XML parsing settings
 WORKUNIT_SIZE = 10000
 NUM_WORKERS = 18
+
+#############################################
+# Benchmarking independent vars. parameters #
+#############################################
+
+results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmarking/'
+output_file_name = 'testname'
+num_abstracts = 5
+use_gpu = [True, False]
+num_jobs = [1, 2, 3, 4]
