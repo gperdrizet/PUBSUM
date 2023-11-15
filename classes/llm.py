@@ -4,13 +4,19 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 class Llm:
     '''Class to hold object related to the llm'''
 
-    def __init__(self):
+    def __init__(self, use_gpu):
 
-        self.use_gpu = conf.use_gpu
-        self.num_jobs = conf.num_jobs
+        self.use_gpu = use_gpu
+        self.num_jobs = 1
 
-        # Initialize LLM for summarization
-        self.model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification")
+        # Initialize LLM for summarization, picking the correct
+        # device map
+        device_map_strategy = 'cpu'
+
+        if use_gpu == True:
+            device_map_strategy = 'auto'
+
+        self.model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map=device_map_strategy)
         
         # Load generation config from model and set some parameters as desired
         self.gen_cfg = GenerationConfig.from_model_config(self.model.config)
@@ -25,6 +31,7 @@ class Llm:
         self.instruction = "summarize, simplify, and contextualize: "
 
     def summarize(self, abstract):
+
         # Prepend the prompt to this abstract and encode
         encoding = self.tokenizer(
             self.instruction + abstract, 
@@ -33,6 +40,10 @@ class Llm:
             truncation = True, 
             return_tensors = 'pt'
         )
+
+        # Move to GPU if appropriate
+        if self.use_gpu == True:
+            encoding = encoding.to('cuda')
         
         # Generate summary
         decoded_ids = self.model.generate(

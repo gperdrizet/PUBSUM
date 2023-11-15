@@ -27,8 +27,8 @@ if __name__ == "__main__":
 
             print(f'\nStarting benchmark run with use_gpu = {use_gpu} and {num_jobs} jobs.')
 
-            # Fire up the model
-            llm = Llm()
+            # Fire up the model for this run
+            llm = Llm(use_gpu)
             
             # Start new reader cursor
             database.create_read_cursor()

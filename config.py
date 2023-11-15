@@ -58,12 +58,12 @@ PASSWD = secrets.passwd
 WORKUNIT_SIZE = 10000
 NUM_WORKERS = 18
 
-#############################################
-# Benchmarking independent vars. parameters #
-#############################################
+###############################################
+# Benchmarking independent vars. & parameters #
+###############################################
 
-results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmarking/'
+results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmark_results/'
 output_file_name = 'testname'
 num_abstracts = 5
 use_gpu = [True, False]
-num_jobs = [1, 2, 3, 4]
+num_jobs = [1]
