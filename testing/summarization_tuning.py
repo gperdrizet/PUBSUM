@@ -1,5 +1,6 @@
 import datetime
 import evaluate
+import nltk
 import pandas as pd
 import numpy as np
 from copy import deepcopy
@@ -54,6 +55,14 @@ Setting fp16 to false also does not solve it.
 
 Since it's running and rouge is improving, I think I will leave it alone for now.
 
+Update: after further reading, I'm pretty sure it has something to do with computing
+and returning a scalar Rouge evaluation metric value. Strange part is - this is 
+exactly how it's done in the Huggingface example script (see here: 
+https://github.com/huggingface/transformers/blob/main/examples/pytorch/summarization/run_summarization.py). 
+My hunch is that the example is for single GPU and we are running multiple GPUs.
+No need to spend more time on this now - it's just a warning and the fine tuning 
+appears to work. Maybe it will be fixed in a future update.
+
 '''
 
 def preprocess_function(examples):
@@ -66,15 +75,37 @@ def preprocess_function(examples):
     inputs = [prefix + doc for doc in examples["text"]]
 
     # Tokenize text with truncation
-    model_inputs = tokenizer(inputs, max_length=1024, truncation=True)
+    model_inputs = tokenizer(
+        inputs, 
+        max_length=1024, 
+        truncation=True,
+        padding=True,
+        return_tensors='pt'
+    ).to('cuda')
 
     # Tokenize summary
-    labels = tokenizer(text_target=examples["summary"], max_length=128, truncation=True)
+    labels = tokenizer(
+        text_target=examples["summary"], 
+        max_length=128,
+        padding=True,
+        truncation=True, 
+        return_tensors='pt'
+    ).to('cuda')
 
     # Add labels to result
     model_inputs["labels"] = labels["input_ids"]
 
     return model_inputs
+
+def postprocess_text(preds, labels):
+    preds = [pred.strip() for pred in preds]
+    labels = [label.strip() for label in labels]
+
+    # rougeLSum expects newline after each sentence
+    preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
+    labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
+
+    return preds, labels
 
 def compute_metrics(eval_pred):
     '''Passes predictions and true labels to compute, returns rouge metric'''
@@ -89,15 +120,18 @@ def compute_metrics(eval_pred):
     labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
+    decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+
     # Compute rouge score
     result = rouge.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+    result = {k: round(v, 4) for k, v in result.items()}
 
     # Get mean prediction length
     prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in predictions]
     result["gen_len"] = np.mean(prediction_lens)
 
     # Return rounded result
-    return {k: round(v, 4) for k, v in result.items()}
+    return result
 
 class CustomCallback(TrainerCallback):
     
@@ -160,7 +194,7 @@ training_args = Seq2SeqTrainingArguments(
     per_device_eval_batch_size = 8,
     weight_decay = 0.005,
     save_total_limit = 1,
-    num_train_epochs = 5,
+    num_train_epochs = 3,
     predict_with_generate = True,
     fp16 = True,
     push_to_hub = False,
