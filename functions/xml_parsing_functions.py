@@ -208,10 +208,11 @@ def get_refs(back, pmc_id):
                         if pub_id.get('pub-id-type') == 'doi':
                             doi = pub_id.text
 
+                            print(f'Ref. DOI: {doi}')
                             # Add tuple of result to ref data list for return
                             ref_data.append((pmc_id, doi))
 
-                # Also, look for mixed citations incase this reference is one of those
+                # Also, look for mixed citations in case this reference is one of those
                 # and do the same as for element-citation
                 mixed_citation = None
                 mixed_citation = ref.find('mixed-citation')
@@ -223,5 +224,21 @@ def get_refs(back, pmc_id):
 
                             ref_data.append((pmc_id, doi))
 
-    # Return what we've got
+                # Lastly look for a citation tag, some earlier papers have those
+                # do the same as for element-citation
+                citation = None
+                citation = ref.find('citation')
+
+                if citation != None:
+                    for pub_id in citation.findall('pub-id'):
+                        if pub_id.get('pub-id-type') == 'doi':
+                            doi = pub_id.text
+
+                            ref_data.append((pmc_id, doi))
+
+    # Return what we've got if we found anything, minus the None we started
+    # the ref list with
+    if len(ref_data) > 1:
+        ref_data = ref_data[1:]
+
     return ref_data
