@@ -8,6 +8,13 @@ from transformers import AutoTokenizer
 from transformers import DataCollatorForSeq2Seq
 from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer, TrainerCallback
 
+# Janky, yes, but it works - this script is a throwaway and won't exist
+# if this project ever becomes a package
+import os
+import sys
+sys.path.append(f'{os.path.dirname(os.path.realpath(__file__))}/..')
+import config as conf
+
 '''Fine tuning of summarization on California subset of the BillSum dataset.
 from: https://huggingface.co/docs/transformers/tasks/summarization
 
@@ -145,7 +152,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 print(f'Model is: {type(model)}\n')
 
 training_args = Seq2SeqTrainingArguments(
-    output_dir = "./.cache/models--t5-billsum",
+    output_dir = f"{conf.PROJECT_ROOT_PATH}/.cache/models--t5-billsum",
     evaluation_strategy = "epoch",
     #eval_steps = 1,
     learning_rate = 2e-5,
@@ -153,7 +160,7 @@ training_args = Seq2SeqTrainingArguments(
     per_device_eval_batch_size = 8,
     weight_decay = 0.005,
     save_total_limit = 1,
-    num_train_epochs = 50,
+    num_train_epochs = 5,
     predict_with_generate = True,
     fp16 = True,
     push_to_hub = False,
@@ -211,5 +218,5 @@ print(results_df)
 print()
 print(results_df.info())
 
-result_file = f'./testing/training_run_results/{result_date}.csv'
+result_file = f'{conf.PROJECT_ROOT_PATH}/testing/summarization_tuning_results/{result_date}.csv'
 results_df.to_csv(result_file, index=False)
