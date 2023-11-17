@@ -1,11 +1,9 @@
 import psycopg2
 import pandas as pd
 import multiprocessing as mp
-#import xml.etree.ElementTree as ET
 
 import config as conf
 import functions.xml_parsing_functions as xml_funcs
-#import functions.error_handling_functions as error_funcs
 
 if __name__ == "__main__":
 
@@ -14,6 +12,7 @@ if __name__ == "__main__":
     # Read file list into pandas dataframe
     print('Reading file list into pandas df')
     file_list_df = pd.read_csv(conf.MASTER_FILE_LIST)
+    print(file_list_df.head())
 
     # Extract article paths and PMC IDs as lists
     print('Extracting PMC ID and file path')
@@ -62,7 +61,7 @@ if __name__ == "__main__":
     if data_exists == True:
         print('We have already parsed some articles')
 
-        # Get only file paths we have not parsed yes
+        # Get only file paths we have not parsed yet
         cur.execute("""
             SELECT article_file_path
             FROM article_file_paths
@@ -78,7 +77,7 @@ if __name__ == "__main__":
         data_paths = [path[0] for path in data_paths_result]
 
 
-    # If we have not parsed any articles yes, use the full list of article paths
+    # If we have not parsed any articles yet, use the full list of article paths
     elif data_exists == False:
         print('No title data exists yet')
         data_paths = article_paths
@@ -114,7 +113,7 @@ if __name__ == "__main__":
 
     print(f'Article path list contains {len(data_paths)} files')
 
-    # If there are article sto be parsed, divide them up and submit to 
+    # If there are article still be parsed, divide them up and submit to 
     # parse function via multiprocessing
     if len(data_paths) > 0:
         print(f'Example path: {data_paths[0]}')
