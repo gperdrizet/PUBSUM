@@ -62,7 +62,15 @@ NUM_WORKERS = 16
 # Benchmarking independent vars. & parameters #
 ###############################################
 
-device_map_benchmark_results_dir = f'{PROJECT_ROOT_PATH}/benchmarks/device_map'
-device_map_benchmark_output_file_name = 'results.csv'
-device_map_num_abstracts = 30
+# Benchmarks parent dir
+benchmark_dir = f'{PROJECT_ROOT_PATH}/benchmarks/'
+
+# PostgreSQL/psycopg2 insert benchmark for table creation
+insert_benchmark_results_dir = f'{benchmark_dir}/sql_insert'
+insert_benchmark_abstracts = 3
+insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'copy_from']
+
+# Huggingface device map benchmark for abstract summarization
+device_map_benchmark_results_dir = f'{benchmark_dir}/huggingface_device_map'
+device_map_benchmark_abstracts = 3
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
