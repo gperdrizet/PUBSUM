@@ -1,4 +1,0 @@
-train_loss,train_rouge1,train_rouge2,train_rougeL,train_rougeLsum,train_gen_len,train_runtime,train_samples_per_second,train_steps_per_second,epoch,step,eval_loss,eval_rouge1,eval_rouge2,eval_rougeL,eval_rougeLsum,eval_gen_len,eval_runtime,eval_samples_per_second,eval_steps_per_second
-5.020901679992676,0.1097,0.0203,0.0864,0.0875,19.0,1.8445,5.421,1.084,1.0,2,4.988890171051025,0.1414,0.0398,0.1169,0.1164,19.0,1.7925,5.579,1.116
-4.933874607086182,0.1121,0.0223,0.0866,0.0877,19.0,1.8252,5.479,1.096,2.0,4,4.917547225952148,0.1414,0.0398,0.1169,0.1164,19.0,1.7861,5.599,1.12
-4.895069122314453,0.1097,0.0203,0.0864,0.0875,19.0,1.8131,5.515,1.103,3.0,6,4.8862762451171875,0.1381,0.0362,0.1134,0.113,19.0,1.806,5.537,1.107
