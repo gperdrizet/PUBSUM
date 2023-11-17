@@ -56,13 +56,13 @@ PASSWD = secrets.passwd
 
 # XML parsing settings
 WORKUNIT_SIZE = 10000
-NUM_WORKERS = 18
+NUM_WORKERS = 16
 
 ###############################################
 # Benchmarking independent vars. & parameters #
 ###############################################
 
-summarization_benchmark_results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmark_results/'
-summarization_benchmark_output_file_name = 'testname'
-num_abstracts = 30
+device_map_benchmark_results_dir = f'{PROJECT_ROOT_PATH}/benchmarks/device_map'
+device_map_benchmark_output_file_name = 'results.csv'
+device_map_num_abstracts = 30
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
