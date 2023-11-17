@@ -22,45 +22,48 @@ if __name__ == "__main__":
     database.create_write_cursor()
     database.make_summary_table()
 
-    for use_gpu in conf.use_gpu:
-        for num_jobs in conf.num_jobs:
+    for device_map_strategy in conf.device_map_strategies:
 
-            print(f'\nStarting benchmark run with use_gpu = {use_gpu} and {num_jobs} jobs.')
+        print(f'\nStarting benchmark run on {conf.num_abstracts} abstracts with device map strategy {device_map_strategy}.')
+        
+        # Instantiate collector for results from this run
+        results = Results()
 
-            # Fire up the model for this run
-            llm = Llm(use_gpu)
-            
-            # Start new reader cursor
-            database.create_read_cursor()
+        # Fire up the model for this run
+        llm = Llm(device_map_strategy)
+        
+        # Start new reader cursor
+        database.create_read_cursor()
 
-            # Get the rows
-            database.get_rows()
+        # Get the rows
+        database.get_rows()
 
-            # Loop on abstract rows
-            row_count = 0
+        # Loop on abstract rows
+        row_count = 0
 
-            for row in database.read_cur:
+        for row in database.read_cur:
 
-                # Make sure this abstract actually has content to be summarized
-                if row[1] != None:
+            # Make sure this abstract actually has content to be summarized
+            if row[1] != None:
 
-                    # Plink
-                    row_count += 1
-                    results.data['abstract_num'].append(row_count)
-                    results.data['used_gpu'].append(use_gpu)
-                    results.data['num_jobs'].append(num_jobs)
-                    pmcid = row[0]
-                    print(f'Summarizing {pmcid}: {row_count} of {conf.num_abstracts}', end = '\r')
+                # Plink
+                row_count += 1
+                results.data['abstract_num'].append(row_count)
+                results.data['device_map_strategy'].append(device_map_strategy)
+                pmcid = row[0]
+                print(f'Summarizing {pmcid}: {row_count} of {conf.num_abstracts}', end = '\r')
 
-                    # Do and time the summary
-                    summarization_start = time.time()
-                    summary = llm.summarize(row[1])
-                    results.data['summarization_time'].append(time.time() - summarization_start)
+                # Do and time the summary
+                summarization_start = time.time()
+                summary = llm.summarize(row[1])
+                results.data['summarization_time'].append(time.time() - summarization_start)
 
-                    # Insert the new summary into the table
-                    database.insert(summary, pmcid)
+                # Insert the new summary into the table
+                database.insert(summary, pmcid)
 
         # Innermost independent variable loop is done, so save the results for
         # this condition and close the read cursor
         results.save_result()
         database.close_read_cursor()
+
+    print()

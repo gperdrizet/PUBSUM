@@ -9,14 +9,13 @@ class Results:
     def __init__(self):
 
         # Output file for results
-        self.output_file = f'{conf.results_dir}/{conf.output_file_name}'
+        self.output_file = f'{conf.summarization_benchmark_results_dir}/{conf.summarization_benchmark_output_file_name}'
 
         # Independent vars for run
         self.data = {}
         self.data['abstract_num'] = []
         self.data['summarization_time'] = []
-        self.data['used_gpu'] = []
-        self.data['num_jobs'] = []
+        self.data['device_map_strategy'] = []
 
     def save_result(self):
 

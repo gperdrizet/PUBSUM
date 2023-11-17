@@ -62,8 +62,7 @@ NUM_WORKERS = 18
 # Benchmarking independent vars. & parameters #
 ###############################################
 
-results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmark_results/'
-output_file_name = 'testname'
-num_abstracts = 5
-use_gpu = [True, False]
-num_jobs = [1]
+summarization_benchmark_results_dir = f'{PROJECT_ROOT_PATH}/testing/summarization_benchmark_results/'
+summarization_benchmark_output_file_name = 'testname'
+num_abstracts = 30
+device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']

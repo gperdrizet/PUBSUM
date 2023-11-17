@@ -4,19 +4,30 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 class Llm:
     '''Class to hold object related to the llm'''
 
-    def __init__(self, use_gpu):
+    def __init__(self, device_map_strategy):
 
-        self.use_gpu = use_gpu
-        self.num_jobs = 1
+        self.device_map_strategy = device_map_strategy
 
-        # Initialize LLM for summarization, picking the correct
-        # device map
-        device_map_strategy = 'cpu'
+        # Translate device map strategy for huggingface. Start with
+        # device map set to CPU only by default
+        device_map = 'cpu'
 
-        if use_gpu == True:
-            device_map_strategy = 'auto'
+        if device_map_strategy == 'multi-GPU':
+            device_map = 'auto'
 
-        self.model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map=device_map_strategy)
+        elif device_map_strategy == 'single GPU':
+            device_map = 'cuda:0'
+
+        elif device_map_strategy == 'balanced':
+            device_map = 'balanced'
+
+        elif device_map_strategy == 'balanced_low_0':
+            device_map = 'balanced_low_0'
+
+        elif device_map_strategy == 'sequential':
+            device_map = 'sequential'
+
+        self.model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map = device_map)
         
         # Load generation config from model and set some parameters as desired
         self.gen_cfg = GenerationConfig.from_model_config(self.model.config)
@@ -42,7 +53,7 @@ class Llm:
         )
 
         # Move to GPU if appropriate
-        if self.use_gpu == True:
+        if self.device_map_strategy != 'CPU only':
             encoding = encoding.to('cuda')
         
         # Generate summary
