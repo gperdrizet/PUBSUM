@@ -1,95 +1,11 @@
 import psycopg2
 import pandas as pd
 import multiprocessing as mp
-import xml.etree.ElementTree as ET
+#import xml.etree.ElementTree as ET
 
 import config as conf
 import functions.xml_parsing_functions as xml_funcs
-import functions.error_handling_functions as error_funcs
-
-def parse_pmc_xml(workunit_article_paths):
-
-    # Worker needs it's own connection to the database
-    con = psycopg2.connect(f'dbname={conf.DB_NAME} user={conf.USER} password={conf.PASSWD} host={conf.HOST}')
-
-    cur = con.cursor()
-
-    # Counter for articles parsed
-    article_count = 0
-
-    # Iterate on target files
-    for path in workunit_article_paths:
-
-        # Get root of XML tree - protect me with try except!
-        tree = None
-
-        try:
-            tree = ET.parse(str(path))
-
-        # Catch and handle parse errors
-        except ET.ParseError as e:
-            print(f'Caught: {e}')
-
-            # Try to recover tree after unbound prefix error
-            tree = error_funcs.fix_unbound_prefix(path)
-
-            # If we got a tree back, then we are all set
-            if tree != None:
-                print('Successfully recovered tree with lxml')
-
-            # If value of tree is still None, we are out of options and
-            # have to skip this article
-            elif tree == None:
-                print('Could not recover tree, skipping')
-
-            print()
-  
-        # If we have a tree for this article
-        if tree != None:
-            # Find root
-            root = tree.getroot()
-
-            # Get article metadata
-            front = root.find('front')
-            article_meta = front.find('article-meta')
-
-            # Get article data
-            pmc_id = xml_funcs.get_pmc_id_from_xml(article_meta, path)
-            subject_data = xml_funcs.get_subjects(article_meta, pmc_id)
-            title_data = xml_funcs.get_title(article_meta, pmc_id)
-            abstract_data = xml_funcs.get_abstract(article_meta, pmc_id)
-
-            # Get refs
-            back = root.find('back')
-            ref_data = xml_funcs.get_refs(back, pmc_id)
-
-        # If we don't have a tree (meaning file loading or parsing failed) we still
-        # want to put an empty entry in for this article so that we know that we have
-        # parsed it
-        if tree == None:
-            # As a last resort, get the PMC ID from the file path
-            pmc_id = xml_funcs.pmc_id_from_path(path)
-            subject_data = (pmc_id, None)
-            title_data = (pmc_id, None)
-            abstract_data = (pmc_id, None)
-            ref_data = (pmc_id, None)
-
-        # Insert subjects, title abstract and references
-        cur.executemany("INSERT INTO subjects (pmc_id, subject) VALUES(%s, %s)", subject_data)
-        cur.execute("INSERT INTO titles (pmc_id, title) VALUES(%s, %s)", title_data)
-        cur.execute("INSERT INTO abstracts (pmc_id, abstract) VALUES(%s, %s)", abstract_data)
-        cur.executemany("INSERT INTO refs (pmc_id, ref) VALUES(%s, %s)", ref_data)
-        con.commit()
-
-        # On to the next article
-        article_count += 1
-
-    # Close up shop for this workunit
-    con.close()
-    print(f'Completed {article_count} articles ending on: {str(path)}')
-
-    # Noting to return so just send True for successful completion of workunit
-    return True
+#import functions.error_handling_functions as error_funcs
 
 if __name__ == "__main__":
 
@@ -223,7 +139,7 @@ if __name__ == "__main__":
 
         # Initialize pool and submit 
         pool = mp.Pool(conf.NUM_WORKERS)
-        results = pool.map(parse_pmc_xml, workunits)
+        results = pool.map(xml_funcs.parse_pmc_xml, workunits)
 
         # Close up shop
         pool.close()
