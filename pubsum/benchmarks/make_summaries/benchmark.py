@@ -6,9 +6,7 @@ import datetime
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
-import config as conf
-
-if __name__ == "__main__":
+def benchmark():
 
     # Connect to postgresql server
     con = psycopg2.connect(f'dbname={conf.DB_NAME} user={conf.USER} password={conf.PASSWD} host={conf.HOST}')
