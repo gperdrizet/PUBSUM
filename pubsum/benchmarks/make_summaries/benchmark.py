@@ -13,7 +13,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
 def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, replicates):
 
-    print('\nRunning load, summarize, insert benchmark.\n')
+    print('\nRunning naive load, summarize, insert execution time benchmark.\n')
 
     # Connect to postgresql server
     print('Connecting to SQL server.')
@@ -54,6 +54,7 @@ def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, replicate
     # Prompt to prepend to abstracts
     INSTRUCTION = 'summarize, simplify, and contextualize: '
 
+    # Loop on replicates
     i = 1
 
     while i <= replicates:
@@ -61,30 +62,34 @@ def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, replicate
         # Create result collector for this replicate
         results = Results(results_dir)
 
-        # Create a cursor for reading and get rows
+        # Create a cursor for reading and get n random rows
         read_cursor = connection.cursor()
         read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts,))
 
         # Create a second cursor for writing
         write_cursor = connection.cursor()
 
-        # Loop on abstracts and summarize
+        # Loop on abstracts in this replicate and time everything
         row_count = 1
-        loop_start = time.time()
-        summarization_time = 0
-        insert_time = 0
+        replicate_start = time.time()
+        total_summarization_time = 0
+        total_insert_time = 0
 
         for row in read_cursor:
 
+            # Parse row into article accession number and abstract text
             pmcid = row[0]
             abstract = row[1]
 
+            # If the abstract is empty, skip it
             if abstract != None:
 
                 print(f'Rep {i}, row: {row_count}', end='\r')
 
+                # Time the LLM doing it's thing
                 summarization_start = time.time()
 
+                # Add the prompt to the abstract and tokenize
                 encoding = tokenizer(
                     INSTRUCTION + abstract, 
                     max_length = 672, 
@@ -93,36 +98,64 @@ def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, replicate
                     return_tensors = 'pt'
                 )
                 
+                # Generate the summary
                 decoded_ids = model.generate(
                     input_ids = encoding['input_ids'],
                     attention_mask = encoding['attention_mask'], 
                     generation_config = gen_cfg
                 )
                 
+                # Decode summary tokens back to text
                 summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
                 
+                # Stop the summarization timer and add the dT to the total
                 summarization_end = time.time()
-                summarization_time += summarization_end - summarization_start
+                total_summarization_time += summarization_end - summarization_start
 
+                # Start the SQL insert timer
                 insert_start = time.time()
 
+                # Insert the summary text into the SQL table
                 write_cursor.execute("INSERT INTO summary_benchmark (pmc_id, abstract_summary) VALUES(%s, %s)", (pmcid, summary))
                 connection.commit()
 
+                # Stop the insert timer and add the dT to the total
                 insert_end = time.time()
-                insert_time += insert_end - insert_start
+                total_insert_time += insert_end - insert_start
 
             row_count += 1
 
-        # Stop timer and save result
-        loop_end = time.time()
+        # Stop iteration timer
+        replicate_end = time.time()
 
-        total_time = (loop_end - loop_start) / row_count
+        # Calculate total time to complete this replicate
+        total_replicate_time = replicate_end - replicate_start
 
-        results.data['total_time'].append(total_time)
-        results.data['summarization_time'].append(summarization_time / row_count)
-        results.data['insert_time'].append(insert_time / row_count)
-        results.data['loading_time'].append(total_time - (summarization_time / row_count) - (insert_time / row_count))
+        # Calculate average time to complete one abstract in this replicate
+        mean_total_time = total_replicate_time / row_count
+
+        # Calculate average summarization time
+        mean_summarization_time = total_summarization_time / row_count
+
+        # Calculate mean insert time
+        mean_insert_time = total_insert_time / row_count
+
+        # Calculate total load time
+        total_loading_time = total_replicate_time - total_summarization_time - total_insert_time
+
+        # Calculate mean load time
+        mean_loading_time = total_loading_time / row_count
+
+        # Collect and save data from this replicate
+        results.data['num_abstracts'].append(row_count)
+        results.data['total_replicate_time'].append(total_replicate_time)
+        results.data['total_summarization_time'].append(total_summarization_time)
+        results.data['total_insert_time'].append(total_insert_time)
+        results.data['total_loading_time'].append(total_loading_time)
+        results.data['mean_total_time'].append(mean_total_time)
+        results.data['mean_summarization_time'].append(mean_summarization_time)
+        results.data['mean_insert_time'].append(mean_insert_time)
+        results.data['mean_loading_time'].append(mean_loading_time)
 
         results.save_result()
 
@@ -145,10 +178,15 @@ class Results:
 
         # Independent vars for run
         self.data = {}
-        self.data['total_time'] = []
-        self.data['summarization_time'] = []
-        self.data['insert_time'] = []
-        self.data['loading_time'] = []
+        self.data['num_abstracts'] = []
+        self.data['total_replicate_time'] = []
+        self.data['total_summarization_time'] = []
+        self.data['total_insert_time'] = []
+        self.data['total_loading_time'] = []
+        self.data['mean_total_time'] = []
+        self.data['mean_summarization_time'] = []
+        self.data['mean_insert_time'] = []
+        self.data['mean_loading_time'] = []
 
     def save_result(self):
 
