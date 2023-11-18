@@ -62,7 +62,7 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     read_cursor = connection.cursor()
 
     # Get the rows
-    read_cursor.execute('SELECT * FROM abstracts LIMIT %s', (num_abstracts,))
+    read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts,))
 
     return read_cursor
 
