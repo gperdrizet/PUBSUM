@@ -67,10 +67,11 @@ benchmark_dir = f'{PROJECT_ROOT_PATH}/benchmarks/'
 
 # PostgreSQL/psycopg2 insert benchmark for table creation
 insert_benchmark_results_dir = f'{benchmark_dir}/sql_insert'
-insert_benchmark_abstracts = 3
-insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'copy_from']
+insert_benchmark_abstracts = [10, 20, 40, 80]
+insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'stringIO']
+insert_benchmark_replicates = 2
 
 # Huggingface device map benchmark for abstract summarization
 device_map_benchmark_results_dir = f'{benchmark_dir}/huggingface_device_map'
-device_map_benchmark_abstracts = 3
+device_map_benchmark_abstracts = 2
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']

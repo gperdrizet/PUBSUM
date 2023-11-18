@@ -4,12 +4,13 @@ import psycopg2
 import time
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
-def benchmark(db_name, user, passwd, host, device_map_strategies, num_abstracts, results_dir):
-    print('Running huggingface device map benchmark.')
+def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, device_map_strategies):
+    
+    print('\nRunning huggingface device map benchmark.\n')
 
     for device_map_strategy in device_map_strategies:
 
-        print(f'\nStarting benchmark run on {num_abstracts} abstracts with device map strategy {device_map_strategy}.')
+        print(f'Starting benchmark run on {num_abstracts} abstracts with device map strategy {device_map_strategy}.')
 
         # Fire up the model for this run
         model, tokenizer, gen_cfg = start_llm(device_map_strategy)
@@ -47,6 +48,8 @@ def benchmark(db_name, user, passwd, host, device_map_strategies, num_abstracts,
         # this condition and close the read cursor
         results.save_result()
         rows.close()
+
+        print()
 
     print()
 

@@ -30,7 +30,11 @@ if __name__ == "__main__":
             conf.DB_NAME,
             conf.USER,
             conf.PASSWD, 
-            conf.HOST
+            conf.HOST,
+            conf.insert_benchmark_results_dir,
+            conf.insert_benchmark_abstracts,
+            conf.insert_strategies,
+            conf.insert_benchmark_replicates
         )
 
     # Huggingface device map strategy for summarization benchmark
@@ -41,7 +45,7 @@ if __name__ == "__main__":
             conf.USER,
             conf.PASSWD, 
             conf.HOST,
-            conf.device_map_strategies,
+            conf.device_map_benchmark_results_dir,
             conf.device_map_benchmark_abstracts,
-            conf.device_map_benchmark_results_dir
+            conf.device_map_strategies
         )
