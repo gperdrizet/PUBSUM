@@ -24,7 +24,7 @@ def benchmark(master_file_list, db_name, user, passwd, host, results_dir,
     article_paths_df = pd.DataFrame(file_list_df, columns=['AccessionID', 'Article File'])
 
     # Connect to postgresql server
-    print('Creating to SQL server.')
+    print('Connecting to SQL server.')
     connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
 
     # Loop on the insertion strategies
