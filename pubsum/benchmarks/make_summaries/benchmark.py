@@ -1,155 +1,164 @@
+'''Initial benchmark of first working loop to load abstracts
+from the SQL database, summarize them with the LLM and then
+insert the summaries into a new SQL table. Goal with this
+benchmark is to establish a time budget so we know how long
+the load, summarize and insert operations are taking.'''
+
 import time
+import os
 import psycopg2
 import psycopg2.extras
-import torch
-import datetime
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
-def benchmark():
+def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, replicates):
+
+    print('\nRunning load, summarize, insert benchmark.\n')
 
     # Connect to postgresql server
-    con = psycopg2.connect(f'dbname={conf.DB_NAME} user={conf.USER} password={conf.PASSWD} host={conf.HOST}')
-    cur = con.cursor()
+    print('Connecting to SQL server.')
+    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
+    write_cursor = connection.cursor()
 
-    # Next we need a table for the abstract summaries. First check to see if it exists already by 
-    # trying to select it
-    cur.execute("select exists(select * from information_schema.tables where table_name=%s)", ('abstract_summaries',))
-    data_exists = cur.fetchone()[0]
+    # Next we need a table to insert into. Make a scratch table just for this test.
+    # If the table exists already, delete it.
+    print('Creating target table for summaries.')
+    write_cursor.execute('''
+        DROP TABLE IF EXISTS summary_benchmark
+    ''')
 
-    # If we get nothing back, we need to create the table
-    if data_exists == False:
-        print('\nCreating SQL table with PMC ID and abstract summary\n')
+    connection.commit()
 
-        # Create file path table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS abstract_summaries(
-            pmc_id varchar(12), abstract_summary text)
-        """)
+    # Create file path table
+    write_cursor.execute('''
+        CREATE TABLE IF NOT EXISTS summary_benchmark
+        (pmc_id varchar(12), abstract_summary text)
+    ''')
 
-        con.commit()
+    connection.commit()
 
-    # If the file path table already exists, do nothing
-    else:
-        print('\nAbstract summary table exists\n')
+    write_cursor.close()
 
-    # Then open another connection and create a cursor for writing
-    con2 = psycopg2.connect(f'dbname={conf.DB_NAME} user={conf.USER} password={conf.PASSWD} host={conf.HOST}')
-
-    # Initialize model set-up generation config
-    model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map = 'auto')
+    # Initialize model and set-up generation config
+    print('Initializing model and tokenizer.')
+    model = AutoModelForSeq2SeqLM.from_pretrained('haining/scientific_abstract_simplification')
     
     gen_cfg = GenerationConfig.from_model_config(model.config)
-    gen_cfg.max_length = 256
+    gen_cfg.max_length = 512
     gen_cfg.top_p = 0.9
     gen_cfg.do_sample = True
-    gen_cfg.torch_dtype = torch.bfloat16
 
     # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+    tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
 
     # Prompt to prepend to abstracts
-    INSTRUCTION = "summarize, simplify, and contextualize: "
+    INSTRUCTION = 'summarize, simplify, and contextualize: '
 
-    # Do reps for science
-    reps = 3
-    total_rows = 24
-    chunk_sizes = [24, 12, 6, 3]
+    i = 1
 
-    results = {
-        'total_times': [],
-        'summarization_times': [],
-        'insert_times': [],
-        'loading_times': [],
-        'chunk_size': [],
-        'replicate': []
-    }
+    while i <= replicates:
 
-    for chunk_size in chunk_sizes:
+        # Create result collector for this replicate
+        results = Results(results_dir)
 
-        for i in range(reps):
+        # Create a cursor for reading and get rows
+        read_cursor = connection.cursor()
+        read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts,))
 
-            # Create a server side cursor to iterate through the abstracts
-            reader = con.cursor('reader', cursor_factory = psycopg2.extras.DictCursor)
-            reader.itersize = chunk_size
-            reader.execute('SELECT * FROM abstracts LIMIT %s', (total_rows,))
+        # Create a second cursor for writing
+        write_cursor = connection.cursor()
 
-            # Create a second cursor for writing
-            writer = con2.cursor()
+        # Loop on abstracts and summarize
+        row_count = 1
+        loop_start = time.time()
+        summarization_time = 0
+        insert_time = 0
 
-            # Loop on abstracts and summarize
-            row_count = 0
-            loop_start = time.time()
-            summarization_time = 0
-            insert_time = 0
+        for row in read_cursor:
 
-            for row in reader:
+            pmcid = row[0]
+            abstract = row[1]
 
-                if row[1] != None:
+            if abstract != None:
 
-                    row_count += 1
+                print(f'Rep {i}, row: {row_count}', end='\r')
 
-                    print(f'Chunk size: {chunk_size}, rep {i}, row: {row_count}', end='\r')
+                summarization_start = time.time()
 
-                    summarization_start = time.time()
+                encoding = tokenizer(
+                    INSTRUCTION + abstract, 
+                    max_length = 672, 
+                    padding = 'max_length', 
+                    truncation = True, 
+                    return_tensors = 'pt'
+                )
+                
+                decoded_ids = model.generate(
+                    input_ids = encoding['input_ids'],
+                    attention_mask = encoding['attention_mask'], 
+                    generation_config = gen_cfg
+                )
+                
+                summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
+                
+                summarization_end = time.time()
+                summarization_time += summarization_end - summarization_start
 
-                    encoding = tokenizer(
-                        INSTRUCTION + row[1], 
-                        max_length = 672, 
-                        padding = 'max_length', 
-                        truncation = True, 
-                        return_tensors = 'pt'
-                    ).to('cuda')
-                    
-                    decoded_ids = model.generate(
-                        input_ids = encoding['input_ids'],
-                        attention_mask = encoding['attention_mask'], 
-                        generation_config = gen_cfg
-                    )
-                    
-                    summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
-                    
-                    summarization_end = time.time()
-                    summarization_time += summarization_end - summarization_start
+                insert_start = time.time()
 
-                    insert_start = time.time()
+                write_cursor.execute("INSERT INTO summary_benchmark (pmc_id, abstract_summary) VALUES(%s, %s)", (pmcid, summary))
+                connection.commit()
 
-                    writer.execute("INSERT INTO abstract_summaries (pmc_id, abstract_summary) VALUES(%s, %s)", (row[0], summary))
-                    con2.commit()
+                insert_end = time.time()
+                insert_time += insert_end - insert_start
 
-                    insert_end = time.time()
-                    insert_time += insert_end - insert_start
+            row_count += 1
 
-            # Close our cursors for next loop
-            reader.close()
-            writer.close()
+        # Stop timer and save result
+        loop_end = time.time()
 
-            loop_end = time.time()
+        total_time = (loop_end - loop_start) / row_count
 
-            total_time = (loop_end - loop_start) / row_count
-            summarization_time = summarization_time / row_count
-            insert_time = insert_time / row_count
-            loading_time = total_time - summarization_time - insert_time
+        results.data['total_time'].append(total_time)
+        results.data['summarization_time'].append(summarization_time / row_count)
+        results.data['insert_time'].append(insert_time / row_count)
+        results.data['loading_time'].append(total_time - (summarization_time / row_count) - (insert_time / row_count))
 
-            results['replicate'].append(i)
-            results['chunk_size'].append(chunk_size)
-            results['total_times'].append(total_time)
-            results['summarization_times'].append(summarization_time)
-            results['insert_times'].append(insert_time)
-            results['loading_times'].append(loading_time)
+        results.save_result()
 
-            print(f'\nReplicate: {i}')
-            print(f'Chunk size: {chunk_size}')
-            print(f'Total time: {total_time}')
-            print(f'Summarization time: {summarization_time}')
-            print(f'Insert time: {insert_time}')
-            print(f'Loading time: {loading_time}\n')
+        # Close our cursors for next replicate
+        read_cursor.close()
+        write_cursor.close()
 
-    results_df = pd.DataFrame(results)
-    print(results_df)
-    print()
-    print(results_df.info())
+        i += 1
 
-    result_date = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M')
-    result_file = f'./testing/SQL_benchmark_results/{result_date}_GPU.csv'
-    results_df.to_csv(result_file, index=False)
+        print()
+
+class Results:
+    '''Class to hold objects and methods for
+    collection of results'''
+
+    def __init__(self, results_dir):
+
+        # Output file for results
+        self.output_file = f'{results_dir}/results.csv'
+
+        # Independent vars for run
+        self.data = {}
+        self.data['total_time'] = []
+        self.data['summarization_time'] = []
+        self.data['insert_time'] = []
+        self.data['loading_time'] = []
+
+    def save_result(self):
+
+        # Make dataframe of new results
+        results_df = pd.DataFrame(self.data)
+
+        # Read existing results if any and concatenate new results
+        if os.path.exists(self.output_file):
+            old_results_df = pd.read_csv(self.output_file)
+            results_df = pd.concat([old_results_df, results_df])
+
+        # Save results for run to csv
+        results_df.to_csv(self.output_file, index = False)
