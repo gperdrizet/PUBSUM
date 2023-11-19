@@ -4,9 +4,40 @@ import psycopg2
 import time
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
-def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, device_map_strategies):
+def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, device_map_strategies):
     
-    print('\nRunning huggingface device map benchmark.\n')
+    print(f'\nRunning huggingface device map benchmark. Resume = {resume}\n')
+
+    # If we are resuming a prior run, read old data and collect the
+    # completed conditions as a list of lists so we can skip them
+    if resume == 'True':
+
+        # Read existing results if any
+        if os.path.exists(f'{results_dir}/results.csv'):
+
+            old_results_df = pd.read_csv(f'{results_dir}/results.csv')
+
+            completed_runs = list(zip(
+                old_results_df['abstract_num'].to_list(),
+                old_results_df['device_map_strategy'].to_list()
+            ))
+
+            print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
+
+        else:
+            print(f'No data to resume from, starting from scratch.')
+            completed_runs = []
+
+
+    # If we are not resuming an old run, empty datafile if it exists
+    else:
+        # Initialize and save empty results object
+        results = Results(results_dir)
+        results.save_result(overwrite = True)
+
+        # Set completed runs to empty list
+        completed_runs = []
+
 
     for device_map_strategy in device_map_strategies:
 
@@ -18,38 +49,47 @@ def benchmark(db_name, user, passwd, host, results_dir, num_abstracts, device_ma
         # Get rows from abstracts table
         rows = get_rows(db_name, user, passwd, host, num_abstracts)
 
-        # Instantiate results object for this run
-        results = Results(results_dir)
-
         # Loop on rows
-        row_count = 0
+        row_count = 1
 
         for row in rows:
 
-            # Get PMCID and abstract text for this row
-            pmcid = row[0]
-            abstract = row[1]
+            run_tuple = (row_count, device_map_strategy)
 
-            # Make sure this abstract actually has content to be summarized
-            if abstract != None:
+            if run_tuple not in completed_runs:
 
-                # Plink
-                row_count += 1
-                results.data['abstract_num'].append(row_count)
-                results.data['device_map_strategy'].append(device_map_strategy)
-                print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}', end = '\r')
+                # Instantiate results object for this run
+                results = Results(results_dir)
 
-                # Do and time the summary
-                summarization_start = time.time()
-                summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
-                results.data['summarization_time'].append(time.time() - summarization_start)
+                # Get PMCID and abstract text for this row
+                pmcid = row[0]
+                abstract = row[1]
 
-        # Innermost independent variable loop is done, so save the results for
-        # this condition and close the read cursor
-        results.save_result()
+                # Make sure this abstract actually has content to be summarized
+                if abstract != None:
+
+                    # Collect run parameters to results
+                    results.data['abstract_num'].append(row_count)
+                    results.data['device_map_strategy'].append(device_map_strategy)
+                    print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
+
+                    # Do and time the summary
+                    summarization_start = time.time()
+                    summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
+                    results.data['summarization_time'].append(time.time() - summarization_start)
+
+                    # Save the result
+                    results.save_result()
+
+                else:
+                    print(f'Empty abstract.')
+
+            row_count += 1
+
+        # Close the read cursor
         rows.close()
 
-        print()
+        print('Done.\n')
 
     print()
 
@@ -146,15 +186,20 @@ class Results:
         self.data['summarization_time'] = []
         self.data['device_map_strategy'] = []
 
-    def save_result(self):
+    def save_result(self, overwrite = False):
 
         # Make dataframe of new results
         results_df = pd.DataFrame(self.data)
 
-        # Read existing results if any and concatenate new results
-        if os.path.exists(self.output_file):
-            old_results_df = pd.read_csv(self.output_file)
-            results_df = pd.concat([old_results_df, results_df])
+        if overwrite == False:
+
+            # Read existing results if any and concatenate new results
+            if os.path.exists(self.output_file):
+                old_results_df = pd.read_csv(self.output_file)
+                results_df = pd.concat([old_results_df, results_df])
+
+        else:
+            print('Clearing any old results.')
 
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
