@@ -1,4 +1,13 @@
 num_jobs,device_map_strategy,summarization_time
-1,single GPU,123.75834965705872
-2,single GPU,72.15293955802917
-3,single GPU,55.84238839149475
+1,CPU physical cores only,271.43518114089966
+2,CPU physical cores only,204.217214345932
+5,CPU physical cores only,146.89056205749512
+10,CPU physical cores only,135.1069655418396
+1,CPU only hyperthreading,274.4651212692261
+2,CPU only hyperthreading,222.6597921848297
+5,CPU only hyperthreading,163.91478443145752
+10,CPU only hyperthreading,123.36601877212524
+20,CPU only hyperthreading,119.4451940059662
+1,single GPU,154.44443345069885
+2,single GPU,92.01500082015993
+3,single GPU,75.15538191795349

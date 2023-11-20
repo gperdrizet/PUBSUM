@@ -2,11 +2,12 @@ import os
 import pandas as pd
 import psycopg2
 import time
+import torch
 import multiprocessing as mp
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, 
-              num_abstracts, device_map_strategies, num_jobs, gpus):
+def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, 
+              device_map_strategies, num_CPU_jobs, num_GPU_jobs, gpus):
     
     print(f'\nRunning data parallel summarization benchmark. Resume = {resume}\n')
 
@@ -44,55 +45,74 @@ def benchmark(db_name, user, passwd, host, resume, results_dir,
     parameter_sets = []
 
     for device_map_strategy in device_map_strategies:
-        for jobs in num_jobs:
-            parameter_set = (device_map_strategy, jobs)
 
-            if parameter_set not in completed_runs:
-                parameter_sets.append(parameter_set)
+        if 'CPU' in device_map_strategy.split(' '):
+            for jobs in num_CPU_jobs:
+                parameter_set = (device_map_strategy, jobs)
+
+                if parameter_set not in completed_runs:
+                    parameter_sets.append(parameter_set)
+
+        elif 'GPU' in device_map_strategy.split(' '):
+            for jobs in num_GPU_jobs:
+                parameter_set = (device_map_strategy, jobs)
+
+                if parameter_set not in completed_runs:
+                    parameter_sets.append(parameter_set)
 
     for parameter_set in parameter_sets:
 
-        run_device_map_strategy = parameter_set[0]
-        run_jobs = parameter_set[1]
-        run_abstracts = num_abstracts // run_jobs
-        print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job.')
+        # Skip the condition that calls for 20 jobs on physical cores only
+        if parameter_set != ('CPU physical cores only', 20):
 
-        # Make results object for run
-        results = Results(results_dir)
-        results.data['device_map_strategy'].append(run_device_map_strategy)
-        results.data['num_jobs'].append(run_jobs)
+            run_device_map_strategy = parameter_set[0]
+            run_jobs = parameter_set[1]
+            run_abstracts = num_abstracts // run_jobs
 
-        # Instantiate pool
-        pool = mp.Pool(
-            processes = run_jobs,
-            maxtasksperchild = 1
-        )
+            if run_device_map_strategy == 'CPU physical cores only':
+                torch.set_num_threads(10 // run_jobs)
 
-        # Start timer
-        start = time.time()
+            elif run_device_map_strategy == 'CPU only hyperthreading':
+                torch.set_num_threads(20 // run_jobs)
+            
+            print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
 
-        # Loop on jobs for this run
+            # Make results object for run
+            results = Results(results_dir)
+            results.data['device_map_strategy'].append(run_device_map_strategy)
+            results.data['num_jobs'].append(run_jobs)
 
-        for i in list(range(0, run_jobs)):
-
-            result = pool.apply_async(start_job,
-                args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy),
-                callback = collect_result
+            # Instantiate pool
+            pool = mp.Pool(
+                processes = run_jobs,
+                maxtasksperchild = 1
             )
 
-        # Clean up
-        pool.close()
-        pool.join()
+            # Start timer
+            start = time.time()
 
-        # Stop the timer and log the result
-        dT = time.time() - start
-        results.data['summarization_time'].append(dT)
-        results.save_result()
+            # Loop on jobs for this run
+
+            for i in list(range(0, run_jobs)):
+
+                result = pool.apply_async(start_job,
+                    args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy),
+                    callback = collect_result
+                )
+
+            # Clean up
+            pool.close()
+            pool.join()
+
+            # Stop the timer and log the result
+            dT = time.time() - start
+            results.data['summarization_time'].append(dT)
+            results.save_result()
 
 
 def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy):
     
-    print(f'Job {i} starting.')
+    print(f'Job {i}: starting.')
     # Fire up the model for this run
     model, tokenizer, gen_cfg = start_llm(device_map_strategy)
 
@@ -112,6 +132,7 @@ def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy
             # Do the summary
             summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
             print(f'Job {i}: finished abstract {row_count}.')
+            #print(f'Summary: {summary}')
 
         else:
             print(f'Job {i}: abstract {row_count} empty.')
@@ -186,7 +207,7 @@ def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
     )
 
     # Move to GPU if appropriate
-    if device_map_strategy != 'CPU only':
+    if device_map_strategy.split(' ')[0] != 'CPU':
         encoding = encoding.to('cuda')
     
     # Generate summary
