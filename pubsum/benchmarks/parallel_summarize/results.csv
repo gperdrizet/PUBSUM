@@ -1,0 +1,4 @@
+num_jobs,device_map_strategy,summarization_time
+1,single GPU,123.75834965705872
+2,single GPU,72.15293955802917
+3,single GPU,55.84238839149475
