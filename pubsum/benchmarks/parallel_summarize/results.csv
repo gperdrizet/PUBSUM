@@ -8,6 +8,6 @@ num_jobs,device_map_strategy,summarization_time
 5,CPU only hyperthreading,163.91478443145752
 10,CPU only hyperthreading,123.36601877212524
 20,CPU only hyperthreading,119.4451940059662
-1,single GPU,154.44443345069885
-2,single GPU,92.01500082015993
-3,single GPU,75.15538191795349
+4,single GPU,61.73127722740173
+8,single GPU,41.69592070579529
+12,single GPU,39.931076526641846

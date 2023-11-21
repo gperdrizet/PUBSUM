@@ -62,7 +62,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
     for parameter_set in parameter_sets:
 
-        # Skip the condition that calls for 20 jobs on physical cores only
+        # Skip the condition that calls for 20 jobs on physical CPU cores only
         if parameter_set != ('CPU physical cores only', 20):
 
             run_device_map_strategy = parameter_set[0]
@@ -91,14 +91,29 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             # Start timer
             start = time.time()
 
-            # Loop on jobs for this run
+            # Index counter to pick GPU
+            gpu_index = 0
 
+            # Loop on jobs for this run
             for i in list(range(0, run_jobs)):
 
+                # Pick GPU for run
+                gpu = gpus[gpu_index]
+                print(f'Job {i}: using GPU {gpu}')
+
                 result = pool.apply_async(start_job,
-                    args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy),
+                    args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy, gpu_index, gpu),
                     callback = collect_result
                 )
+
+                # Increment GPU index - we have four GPUs, so when
+                # the index gets to 3 (0 anchored), reset it back
+                # to 0, otherwise increment it.
+                if gpu_index == 3:
+                    gpu_index = 0
+                
+                else:
+                    gpu_index += 1
 
             # Clean up
             pool.close()
@@ -110,11 +125,14 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             results.save_result()
 
 
-def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy):
+def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy, gpu_index, gpu):
     
     print(f'Job {i}: starting.')
+
+    torch.cuda.set_device(gpu_index)
+    
     # Fire up the model for this run
-    model, tokenizer, gen_cfg = start_llm(device_map_strategy)
+    model, tokenizer, gen_cfg = start_llm(device_map_strategy, gpu)
 
     # Get an abstract to summarize
     rows = get_rows(db_name, user, passwd, host, num_abstracts)
@@ -158,7 +176,7 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     return read_cursor
 
 
-def start_llm(device_map_strategy):
+def start_llm(device_map_strategy, gpu):
         
         # Translate device map strategy for huggingface. Start with
         # device map set to CPU only by default
@@ -168,7 +186,7 @@ def start_llm(device_map_strategy):
             device_map = 'auto'
 
         elif device_map_strategy == 'single GPU':
-            device_map = 'cuda:0'
+            device_map = gpu
 
         elif device_map_strategy == 'balanced':
             device_map = 'balanced'
@@ -207,7 +225,7 @@ def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
     )
 
     # Move to GPU if appropriate
-    if device_map_strategy.split(' ')[0] != 'CPU':
+    if 'CPU' not in device_map_strategy.split(' '):
         encoding = encoding.to('cuda')
     
     # Generate summary
