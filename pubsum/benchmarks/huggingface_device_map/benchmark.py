@@ -119,6 +119,8 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
 
         if len(rows) == num_abstracts:
             break
+        
+    read_cursor.close()
 
     return rows
 
