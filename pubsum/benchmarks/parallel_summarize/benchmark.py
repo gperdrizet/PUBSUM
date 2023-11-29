@@ -12,10 +12,9 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
     print(f'\nRunning data parallel summarization benchmark. Resume = {resume}\n')
 
     # If we are resuming a prior run, read old data and collect the
-    # completed conditions as a list of lists so we can skip them
+    # completed conditions as a list of lists so we can skip them.
     if resume == 'True':
 
-        # Read existing results if any
         if os.path.exists(f'{results_dir}/results.csv'):
 
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
@@ -33,12 +32,11 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
 
     # If we are not resuming an old run, empty datafile if it exists
+    # and start with empty list for completed runs.
     else:
         # Initialize and save empty results object
         results = Results(results_dir)
         results.save_result(overwrite = True)
-
-        # Set completed runs to empty list
         completed_runs = []
 
     # Build parameter sets, excluding any which are already complete
@@ -46,11 +44,17 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
     for device_map_strategy in device_map_strategies:
 
+        # Need to handle CPU jobs differently than GPU jobs, they
+        # use different device maps and job numbers.
         if 'CPU' in device_map_strategy.split(' '):
             for jobs in num_CPU_jobs:
                 parameter_set = (device_map_strategy, jobs)
 
-                if parameter_set not in completed_runs:
+                # Note: the device map/job number loop produces a condition
+                # where we call for 20 jobs on physical cores only, don't add
+                # this condition to the list because we are only working with
+                # 10 physical cores
+                if (parameter_set not in completed_runs) and (parameter_set != ('CPU physical cores only', 20)):
                     parameter_sets.append(parameter_set)
 
         elif 'GPU' in device_map_strategy.split(' '):
@@ -60,77 +64,88 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
                 if parameter_set not in completed_runs:
                     parameter_sets.append(parameter_set)
 
+    # Loop on parameter sets to run jobs
     for parameter_set in parameter_sets:
 
-        # Skip the condition that calls for 20 jobs on physical CPU cores only
-        if parameter_set != ('CPU physical cores only', 20):
+        # Split out the parameters for this run
+        run_device_map_strategy = parameter_set[0]
+        run_jobs = parameter_set[1]
 
-            run_device_map_strategy = parameter_set[0]
-            run_jobs = parameter_set[1]
-            run_abstracts = num_abstracts // run_jobs
+        # Figure out how many abstracts we need to give each worker process
+        run_abstracts = num_abstracts // run_jobs
 
-            if run_device_map_strategy == 'CPU physical cores only':
-                torch.set_num_threads(10 // run_jobs)
+        # Give torch CPU threads based on device map for this run
+        if run_device_map_strategy == 'CPU physical cores only':
+            torch.set_num_threads(10 // run_jobs)
 
-            elif run_device_map_strategy == 'CPU only hyperthreading':
-                torch.set_num_threads(20 // run_jobs)
-            
-            print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
+        elif run_device_map_strategy == 'CPU only hyperthreading':
+            torch.set_num_threads(20 // run_jobs)
+        
+        print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
 
-            # Make results object for run
-            results = Results(results_dir)
-            results.data['device_map_strategy'].append(run_device_map_strategy)
-            results.data['num_jobs'].append(run_jobs)
+        # Make results object for run
+        results = Results(results_dir)
+        results.data['device_map_strategy'].append(run_device_map_strategy)
+        results.data['num_jobs'].append(run_jobs)
 
-            # Instantiate pool
-            pool = mp.Pool(
-                processes = run_jobs,
-                maxtasksperchild = 1
-            )
-
-            # Start timer
-            start = time.time()
-
-            # Index counter to pick GPU
+        # If this is a GPU run, start a counter to pick GPUs for jobs
+        if 'GPU' in run_device_map_strategy.split(' '):
             gpu_index = 0
 
-            # Loop on jobs for this run
-            for i in list(range(0, run_jobs)):
+        # If this run is not using GPU(s), pass none for GPU related parameters
+        else:
+            gpu_index = None
+            gpu = None
 
-                # Pick GPU for run
+        # Instantiate pool with one member for each job we need to run
+        pool = mp.Pool(
+            processes = run_jobs,
+            maxtasksperchild = 1
+        )
+
+        # Start timer
+        start = time.time()
+
+        # Loop on jobs for this run
+        for i in list(range(0, run_jobs)):
+
+            # Pick GPU for run, if needed
+            if 'GPU' in run_device_map_strategy.split(' '):
                 gpu = gpus[gpu_index]
-                if 'GPU' in run_device_map_strategy.split(' '):
-                    print(f'Job {i}: using GPU {gpu}')
+                print(f'Job {i}: using GPU {gpu}')
 
-                result = pool.apply_async(start_job,
-                    args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy, gpu_index, gpu),
-                    callback = collect_result
-                )
+            result = pool.apply_async(start_job,
+                args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy, gpu_index, gpu),
+                callback = collect_result
+            )
 
-                # Increment GPU index - we have four GPUs, so when
-                # the index gets to 3 (0 anchored), reset it back
-                # to 0, otherwise increment it.
+            # Increment GPU index if needed - we have four GPUs, so when the index gets 
+            # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+            if 'GPU' in run_device_map_strategy.split(' '):
                 if gpu_index == 3:
                     gpu_index = 0
                 
                 else:
                     gpu_index += 1
 
-            # Clean up
-            pool.close()
-            pool.join()
+        # Clean up
+        pool.close()
+        pool.join()
 
-            # Stop the timer and log the result
-            dT = time.time() - start
-            results.data['summarization_time'].append(dT)
-            results.save_result()
+        # Stop the timer and log the result
+        dT = time.time() - start
+        results.data['summarization_time'].append(dT)
+        results.save_result()
 
 
 def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy, gpu_index, gpu):
     
     print(f'Job {i}: starting.')
 
-    torch.cuda.set_device(gpu_index)
+    # Assign job to GPU if needed
+    if 'GPU' in device_map_strategy.split(' '):
+        torch.cuda.set_device(gpu_index)
+        print(f'Job {i} has GPU {gpu_index}: {gpu}')
     
     # Fire up the model for this run
     model, tokenizer, gen_cfg = start_llm(device_map_strategy, gpu)
@@ -151,13 +166,12 @@ def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy
             # Do the summary
             summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
             print(f'Job {i}: finished abstract {row_count}.')
-            #print(f'Summary: {summary}')
 
         else:
+            # Print a warning if the abstract we pulled is empty
             print(f'Job {i}: abstract {row_count} empty.')
 
         row_count += 1
-
 
     print(f'Job {1}: done.')
 
@@ -171,10 +185,11 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     # Start new reader cursor
     read_cursor = connection.cursor()
 
-    # Loop until we have num_abstracts rows to return. Note: ideally we would go back to
+    # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
     # the article parsing script and not put empty abstracts into the SQL database. Let's do
-    # That later, but this will work for now to get us were we want to go. Also, this is not
-    # being timed as part of the benchmark.
+    # that later, but this will work for now to get us were we want to go. Also, this is not
+    # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
+    # is irrelevant
 
     # Get 2x the number of rows we want
     read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
@@ -197,8 +212,8 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
 
 def start_llm(device_map_strategy, gpu):
         
-        # Translate device map strategy for huggingface. Start with
-        # device map set to CPU only by default
+        # Translate descriptive device map strategy string to device_map parameter value for 
+        # huggingface. Start with device map set to CPU only by default
         device_map = 'cpu'
 
         if device_map_strategy == 'multi-GPU':
@@ -216,7 +231,11 @@ def start_llm(device_map_strategy, gpu):
         elif device_map_strategy == 'sequential':
             device_map = 'sequential'
 
-        model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map = device_map)
+        # Initialize model with selected device map
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            "haining/scientific_abstract_simplification", 
+            device_map = device_map
+        )
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
@@ -226,9 +245,6 @@ def start_llm(device_map_strategy, gpu):
 
         # Initialize the tokenizer
         tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
-
-        # Set prompt to prepend to abstracts
-        #instruction = "summarize, simplify, and contextualize: "
 
         return model, tokenizer, gen_cfg
 
@@ -260,6 +276,9 @@ def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
     return summary
 
 def collect_result(result):
+    # Need a dummy return here since we don't have good logging setup
+    # this ensures that anything that a worker process sends to STDOUT
+    # or STDERR actually shows up in the terminal
     return True
 
 class Results:
@@ -282,9 +301,8 @@ class Results:
         # Make dataframe of new results
         results_df = pd.DataFrame(self.data)
 
+        # Read existing results if any and concatenate new results if desired
         if overwrite == False:
-
-            # Read existing results if any and concatenate new results
             if os.path.exists(self.output_file):
                 old_results_df = pd.read_csv(self.output_file)
                 results_df = pd.concat([old_results_df, results_df])
