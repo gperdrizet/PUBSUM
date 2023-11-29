@@ -30,11 +30,11 @@ device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'bal
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
-parallel_summarize_benchmark_abstracts = 20
-parallel_summarize_device_map_strategies = ['CPU physical cores only', 'CPU only hyperthreading', 'single GPU']
+parallel_summarize_benchmark_abstracts = 120
+parallel_summarize_device_map_strategies = ['single GPU', 'CPU physical cores only', 'CPU only hyperthreading']
 parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
 parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
-parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3']
+parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
 
 if __name__ == "__main__":
 
