@@ -212,24 +212,13 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
 
 def start_llm(device_map_strategy, gpu):
         
-        # Translate descriptive device map strategy string to device_map parameter value for 
-        # huggingface. Start with device map set to CPU only by default
-        device_map = 'cpu'
+        # Set device_map parameter value for Huggingface
 
-        if device_map_strategy == 'multi-GPU':
-            device_map = 'auto'
+        if gpu == None:
+            device_map = 'cpu'
 
-        elif device_map_strategy == 'single GPU':
+        else:
             device_map = gpu
-
-        elif device_map_strategy == 'balanced':
-            device_map = 'balanced'
-
-        elif device_map_strategy == 'balanced_low_0':
-            device_map = 'balanced_low_0'
-
-        elif device_map_strategy == 'sequential':
-            device_map = 'sequential'
 
         # Initialize model with selected device map
         model = AutoModelForSeq2SeqLM.from_pretrained(
