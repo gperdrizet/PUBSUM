@@ -74,19 +74,13 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
         # Figure out how many abstracts we need to give each worker process
         run_abstracts = num_abstracts // run_jobs
 
-        # Give torch CPU threads based on device map for this run
-        if run_device_map_strategy == 'CPU physical cores only':
-            torch.set_num_threads(10 // run_jobs)
+        # Give torch CPU threads based on device map for this run, if appropriate
+        if 'CPU' in run_device_map_strategy.split(' '):
+            if run_device_map_strategy == 'CPU physical cores only':
+                torch.set_num_threads(10 // run_jobs)
 
-        elif run_device_map_strategy == 'CPU only hyperthreading':
-            torch.set_num_threads(20 // run_jobs)
-        
-        print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
-
-        # Make results object for run
-        results = Results(results_dir)
-        results.data['device_map_strategy'].append(run_device_map_strategy)
-        results.data['num_jobs'].append(run_jobs)
+            elif run_device_map_strategy == 'CPU only hyperthreading':
+                torch.set_num_threads(20 // run_jobs)
 
         # If this is a GPU run, start a counter to pick GPUs for jobs
         if 'GPU' in run_device_map_strategy.split(' '):
@@ -103,6 +97,13 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             maxtasksperchild = 1
         )
 
+        # Make results object for run
+        results = Results(results_dir)
+        results.data['device_map_strategy'].append(run_device_map_strategy)
+        results.data['num_jobs'].append(run_jobs)
+
+        print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
+        print(f'GPU: {gpu}'        )
         # Start timer
         start = time.time()
 
