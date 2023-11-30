@@ -14,24 +14,24 @@ benchmark_dir = f'{conf.PROJECT_ROOT_PATH}/benchmarks/'
 
 # Initial MVP load, summarize, insert execution time benchmark
 summarize_benchmark_results_dir = f'{benchmark_dir}/load_summarize_insert'
-summarize_benchmark_abstracts = 10
+summarize_benchmark_abstracts = 5
 summarize_benchmark_replicates = 10
 
 # PostgreSQL/psycopg2 insert benchmark for table creation
 insert_benchmark_results_dir = f'{benchmark_dir}/sql_insert'
-insert_benchmark_abstracts = [1000, 20000, 40000]
+insert_benchmark_abstracts = [10000, 200000, 400000]
 insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'stringIO']
 insert_benchmark_replicates = 10
 
 # Huggingface device map benchmark for abstract summarization
 device_map_benchmark_results_dir = f'{benchmark_dir}/huggingface_device_map'
-device_map_benchmark_abstracts = 10
+device_map_benchmark_abstracts = 16
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
 parallel_summarize_benchmark_abstracts = 120
-parallel_summarize_device_map_strategies = ['single GPU', 'CPU physical cores only', 'CPU only hyperthreading']
+parallel_summarize_device_map_strategies = ['GPU', 'CPU physical cores only', 'CPU only hyperthreading']
 parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
 parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
 parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
