@@ -30,7 +30,6 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             print(f'No data to resume from, starting from scratch.')
             completed_runs = []
 
-
     # If we are not resuming an old run, empty datafile if it exists
     # and start with empty list for completed runs.
     else:
@@ -103,7 +102,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
         results.data['num_jobs'].append(run_jobs)
 
         print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
-        print(f'GPU: {gpu}'        )
+
         # Start timer
         start = time.time()
 
