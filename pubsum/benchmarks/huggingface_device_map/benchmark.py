@@ -18,8 +18,8 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, d
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
 
             completed_runs = list(zip(
-                old_results_df['abstract_num'].to_list(),
-                old_results_df['device_map_strategy'].to_list()
+                old_results_df['abstract'].to_list(),
+                old_results_df['device map strategy'].to_list()
             ))
 
             print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
@@ -27,7 +27,6 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, d
         else:
             print(f'No data to resume from, starting from scratch.')
             completed_runs = []
-
 
     # If we are not resuming an old run, empty datafile if it exists
     else:
@@ -69,14 +68,16 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, d
                 if abstract != None:
 
                     # Collect run parameters to results
-                    results.data['abstract_num'].append(row_count)
-                    results.data['device_map_strategy'].append(device_map_strategy)
+                    results.data['abstract'].append(row_count)
+                    results.data['device map strategy'].append(device_map_strategy)
                     print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
 
                     # Do and time the summary
                     summarization_start = time.time()
                     summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
-                    results.data['summarization_time'].append(time.time() - summarization_start)
+                    dT = time.time() - summarization_start
+                    results.data['summarization time (sec.)'].append(dT)
+                    results.data['summarization rate (abstracts/sec.)'].append(1/dT)
 
                     # Save the result
                     results.save_result()
@@ -200,9 +201,10 @@ class Results:
 
         # Independent vars for run
         self.data = {}
-        self.data['abstract_num'] = []
-        self.data['summarization_time'] = []
-        self.data['device_map_strategy'] = []
+        self.data['abstract'] = []
+        self.data['device map strategy'] = []
+        self.data['summarization time (sec.)'] = []
+        self.data['summarization rate (abstracts/sec.)'] = []
 
     def save_result(self, overwrite = False):
 
