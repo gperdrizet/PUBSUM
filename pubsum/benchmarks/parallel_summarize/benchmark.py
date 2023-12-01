@@ -7,7 +7,7 @@ import multiprocessing as mp
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 
 def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, 
-              device_map_strategies, num_CPU_jobs, num_GPU_jobs, gpus):
+              replicates, device_map_strategies, num_CPU_jobs, num_GPU_jobs, gpus):
     
     print(f'\nRunning data parallel summarization benchmark. Resume = {resume}\n')
 
@@ -20,6 +20,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
 
             completed_runs = list(zip(
+                old_results_df['replicate'].to_list(),
                 old_results_df['device_map_strategy'].to_list(),
                 old_results_df['num_jobs'].to_list()
             ))
@@ -47,38 +48,41 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
         # use different device maps and job numbers.
         if 'CPU' in device_map_strategy.split(' '):
             for jobs in num_CPU_jobs:
-                parameter_set = (device_map_strategy, jobs)
+                for i in range(replicates):
+                    parameter_set = (i, device_map_strategy, jobs)
 
-                # Note: the device map/job number loop produces a condition
-                # where we call for 20 jobs on physical cores only, don't add
-                # this condition to the list because we are only working with
-                # 10 physical cores
-                if (parameter_set not in completed_runs) and (parameter_set != ('CPU physical cores only', 20)):
-                    parameter_sets.append(parameter_set)
+                    # Note: the device map/job number loop produces a condition
+                    # where we call for 20 jobs on physical cores only, don't add
+                    # this condition to the list because we are only working with
+                    # 10 physical cores
+                    if (parameter_set not in completed_runs) and (parameter_set != ('CPU physical cores', 20)):
+                        parameter_sets.append(parameter_set)
 
         elif 'GPU' in device_map_strategy.split(' '):
             for jobs in num_GPU_jobs:
-                parameter_set = (device_map_strategy, jobs)
+                for i in range(replicates):
+                    parameter_set = (i, device_map_strategy, jobs)
 
-                if parameter_set not in completed_runs:
-                    parameter_sets.append(parameter_set)
+                    if parameter_set not in completed_runs:
+                        parameter_sets.append(parameter_set)
 
     # Loop on parameter sets to run jobs
     for parameter_set in parameter_sets:
 
         # Split out the parameters for this run
-        run_device_map_strategy = parameter_set[0]
-        run_jobs = parameter_set[1]
+        replicate = parameter_set[0]
+        run_device_map_strategy = parameter_set[1]
+        run_jobs = parameter_set[2]
 
         # Figure out how many abstracts we need to give each worker process
         run_abstracts = num_abstracts // run_jobs
 
         # Give torch CPU threads based on device map for this run, if appropriate
         if 'CPU' in run_device_map_strategy.split(' '):
-            if run_device_map_strategy == 'CPU physical cores only':
+            if run_device_map_strategy == 'CPU physical cores':
                 torch.set_num_threads(10 // run_jobs)
 
-            elif run_device_map_strategy == 'CPU only hyperthreading':
+            elif run_device_map_strategy == 'CPU hyperthreading':
                 torch.set_num_threads(20 // run_jobs)
 
         # If this is a GPU run, start a counter to pick GPUs for jobs
@@ -98,10 +102,13 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
         # Make results object for run
         results = Results(results_dir)
-        results.data['device_map_strategy'].append(run_device_map_strategy)
-        results.data['num_jobs'].append(run_jobs)
+        results.data['replicate'].append(replicate)
+        results.data['abstracts'].append(num_abstracts)
+        results.data['abstracts per worker'].append(run_abstracts)
+        results.data['device map strategy'].append(run_device_map_strategy)
+        results.data['workers'].append(run_jobs)
 
-        print(f'\nStarting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
+        print(f'\nReplicate {replicate}: starting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
 
         # Start timer
         start = time.time()
@@ -112,7 +119,6 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
             # Pick GPU for run, if needed
             if 'GPU' in run_device_map_strategy.split(' '):
                 gpu = gpus[gpu_index]
-                print(f'Job {i}: using GPU {gpu}')
 
             result = pool.apply_async(start_job,
                 args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy, gpu_index, gpu),
@@ -134,7 +140,8 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
         # Stop the timer and log the result
         dT = time.time() - start
-        results.data['summarization_time'].append(dT)
+        results.data['summarization time (sec.)'].append(dT)
+        results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
         results.save_result()
 
 
@@ -145,7 +152,6 @@ def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy
     # Assign job to GPU if needed
     if 'GPU' in device_map_strategy.split(' '):
         torch.cuda.set_device(gpu_index)
-        print(f'Job {i} has GPU {gpu_index}: {gpu}')
     
     # Fire up the model for this run
     model, tokenizer, gen_cfg = start_llm(device_map_strategy, gpu)
@@ -283,9 +289,13 @@ class Results:
 
         # Independent vars for run
         self.data = {}
-        self.data['num_jobs'] = []
-        self.data['device_map_strategy'] = []
-        self.data['summarization_time'] = []
+        self.data['replicate'] = []
+        self.data['abstracts'] = []
+        self.data['abstracts per worker'] = []
+        self.data['workers'] = []
+        self.data['device map strategy'] = []
+        self.data['summarization time (sec.)'] = []
+        self.data['summarization rate (abstracts/sec.)'] = []
 
     def save_result(self, overwrite = False):
 
