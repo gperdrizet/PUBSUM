@@ -21,8 +21,8 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
 
             completed_runs = list(zip(
                 old_results_df['replicate'].to_list(),
-                old_results_df['device_map_strategy'].to_list(),
-                old_results_df['num_jobs'].to_list()
+                old_results_df['device map strategy'].to_list(),
+                old_results_df['workers'].to_list()
             ))
 
             print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
