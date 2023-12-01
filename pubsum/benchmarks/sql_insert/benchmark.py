@@ -25,8 +25,8 @@ def benchmark(master_file_list, db_name, user, passwd, host, resume,
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
 
             completed_runs = list(zip(
-                old_results_df['insert_strategy'].to_list(),
-                old_results_df['num_abstracts'].to_list(),
+                old_results_df['insert strategy'].to_list(),
+                old_results_df['abstracts'].to_list(),
                 old_results_df['replicate'].to_list()
             ))
 
@@ -90,9 +90,10 @@ def benchmark(master_file_list, db_name, user, passwd, host, resume,
                     insert_time = insert(rows, insert_strategy, write_cursor, connection)
 
                     # Collect result
-                    results.data['num_abstracts'].append(n)
-                    results.data['insert_time'].append(insert_time)
-                    results.data['insert_strategy'].append(insert_strategy)
+                    results.data['abstracts'].append(n)
+                    results.data['insert time (sec.)'].append(insert_time)
+                    results.data['insert rate (abstracts/sec.)'].append(n/insert_time)
+                    results.data['insert strategy'].append(insert_strategy)
                     results.data['replicate'].append(i)
 
                     # Save result
@@ -216,9 +217,10 @@ class Results:
 
         # Independent vars for run
         self.data = {}
-        self.data['num_abstracts'] = []
-        self.data['insert_time'] = []
-        self.data['insert_strategy'] = []
+        self.data['abstracts'] = []
+        self.data['insert time (sec.)'] = []
+        self.data['insert rate (abstracts/sec.)'] = []
+        self.data['insert strategy'] = []
         self.data['replicate'] = []
 
     def save_result(self, overwrite = False):
