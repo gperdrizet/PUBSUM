@@ -16,6 +16,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
         if os.path.exists(f'{results_dir}/results.csv'):
 
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
+            print(old_results_df.info())
 
             completed_runs = list(zip(
                 old_results_df['abstract'].to_list(),
