@@ -7,7 +7,7 @@
 Error named symbol not found at line 529 in file /mmfs1/gscratch/zlab/timdettmers/git/bitsandbytes/csrc/ops.cu
 ```
 
-Also, sometimes getting the following warning...
+3. Also, sometimes getting the following warning...
 
 ```
 huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
@@ -19,4 +19,10 @@ Error named symbol not found at line 74 in file /mmfs1/gscratch/zlab/timdettmers
 
 A little strange since we are not using multiprocessing for this benchmark - it should be a single job on a single GPU. Did sporadically see this warning when working on the parallel summarization benchmark too, never figured out what it was because it was not reliably reproducible.
 
-Fixed by setting TOKENIZERS_PARALLELISM environment variable to true before run start.
+Fixed by setting:
+
+```
+os.environ['TOKENIZERS_PARALLELISM'] = 'true'
+```
+
+From launcher script before run start.
