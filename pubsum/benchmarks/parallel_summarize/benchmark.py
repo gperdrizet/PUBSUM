@@ -55,7 +55,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
                     # where we call for 20 jobs on physical cores only, don't add
                     # this condition to the list because we are only working with
                     # 10 physical cores
-                    if (parameter_set not in completed_runs) and (parameter_set != ('CPU physical cores', 20)):
+                    if (parameter_set not in completed_runs) and (parameter_set[1:] != ('CPU physical cores', 20)):
                         parameter_sets.append(parameter_set)
 
         elif 'GPU' in device_map_strategy.split(' '):
@@ -80,6 +80,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts,
         # Give torch CPU threads based on device map for this run, if appropriate
         if 'CPU' in run_device_map_strategy.split(' '):
             if run_device_map_strategy == 'CPU physical cores':
+                print(f'Run jobs: {run_jobs}')
                 torch.set_num_threads(10 // run_jobs)
 
             elif run_device_map_strategy == 'CPU hyperthreading':
