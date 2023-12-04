@@ -1,4 +1,5 @@
 import argparse
+import os
 import config as conf
 import benchmarks.load_summarize_insert.benchmark as lsi
 import benchmarks.sql_insert.benchmark as sql
@@ -32,7 +33,7 @@ device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'bal
 # Huggingface GPU inference optimization benchmark
 gpu_inference_benchmark_results_dir = f'{benchmark_dir}/huggingface_GPU_inference'
 gpu_inference_benchmark_abstracts = 3
-gpu_inference_benchmark_optimization_strategies = ['Eight bit quantization', 'Four bit quantization']
+gpu_inference_benchmark_optimization_strategies = ['None', 'Four bit quantization']
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
@@ -152,6 +153,9 @@ if __name__ == "__main__":
 
     # Huggingface GPU inference optimization benchmark
     if args.hf_GPU_inference == 'True':
+
+        # Silence parallelism warning
+        os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 
         GPU_inference.benchmark(
             conf.DB_NAME,
