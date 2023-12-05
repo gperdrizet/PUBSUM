@@ -89,6 +89,11 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
             row_count += 1
 
+        # Get rid of model and tokenizer from run, free up memory
+        del model
+        del tokenizer
+        torch.cuda.empty_cache()
+
         print('Done.\n')
 
     print()
@@ -130,40 +135,78 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
 
 def start_llm(optimization_strategy):
         
-        # Set quantization if any
-        #four_bit = False
-        eight_bit = False
-        quantization_config = None
-
-        if optimization_strategy == 'eight bit quantization':
-            eight_bit = True
-
-        elif optimization_strategy == 'four bit quantization':
-            #four_bit = True
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True, 
-                bnb_4bit_compute_dtype=torch.float16
-            )
-
-        
-        # Set device map to run model on one GPU
+        # Place model on single GPU
         device_map = 'cuda:0'
+        
+        # Set quantization for bitsandbytes
+        if optimization_strategy == 'none':
 
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            "haining/scientific_abstract_simplification", 
-            device_map=device_map,
-            load_in_8bit=eight_bit,
-            quantization_config=quantization_config
-        )
+            # Initialize the tokenizer
+            tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+
+            # Initialize model
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                "haining/scientific_abstract_simplification", 
+                device_map=device_map
+            )
+        
+        elif 'bitsandbytes' in optimization_strategy.split(' '):
+            quantization_config = None
+
+            if optimization_strategy == 'bitsandbytes eight bit':
+
+                quantization_config = BitsAndBytesConfig(
+                    load_in_8bit=True, 
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+
+            elif optimization_strategy == 'bitsandbytes four bit':
+
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True, 
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+
+            elif optimization_strategy == 'bitsandbytes four bit nf4':
+
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True, 
+                    bnb_4bit_quant_type='nf4',
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+
+            elif optimization_strategy == 'bitsandbytes nested four bit':
+
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True, 
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+
+            elif optimization_strategy == 'bitsandbytes nested four bit nf4':
+
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True, 
+                    bnb_4bit_quant_type='nf4',
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+
+            # Initialize the tokenizer
+            tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+
+            # Initialize model
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                "haining/scientific_abstract_simplification", 
+                device_map=device_map,
+                quantization_config=quantization_config
+            )
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
         gen_cfg.max_length = 256
         gen_cfg.top_p = 0.9
         gen_cfg.do_sample = True
-
-        # Initialize the tokenizer
-        tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
 
         return model, tokenizer, gen_cfg
 

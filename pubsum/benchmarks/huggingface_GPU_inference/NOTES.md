@@ -226,6 +226,8 @@ Now the benchmark runs, but we have two more issues. During benchmark runs with 
 W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
 ```
 
+Trivial fix - not even sure why or what is looking or TensorRT, as far as I know, we are not using tensorflow at all. Removing tensorflow and TensorRT from the environment silences the warning. No apparent issues.
+
 Eight bit quantization works with no issues, but four bit complains:
 
 ```
@@ -239,6 +241,7 @@ Fixed by adding the following to model load:
 bnb_4bit_compute_dtype=torch.float16
 ```
 
+Note: this is different from the torch.bfloat16 suggested in the [huggingface docs](https://huggingface.co/docs/transformers/main_classes/quantization).
 ## 3. Also, sometimes getting the following warning
 
 ```

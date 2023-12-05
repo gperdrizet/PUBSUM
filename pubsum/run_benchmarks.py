@@ -33,7 +33,14 @@ device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'bal
 # Huggingface GPU inference optimization benchmark
 gpu_inference_benchmark_results_dir = f'{benchmark_dir}/huggingface_GPU_inference'
 gpu_inference_benchmark_abstracts = 3
-gpu_inference_benchmark_optimization_strategies = ['none', 'eight bit quantization', 'four bit quantization']
+gpu_inference_benchmark_optimization_strategies = [
+    'none',
+    'bitsandbytes eight bit', 
+    'bitsandbytes four bit', 
+    'bitsandbytes four bit nf4',
+    'bitsandbytes nested four bit',
+    'bitsandbytes nested four bit nf4'
+]
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
