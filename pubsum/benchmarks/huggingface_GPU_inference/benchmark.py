@@ -149,8 +149,8 @@ def start_llm(optimization_strategy):
         # Place model on single GPU
         device_map = 'cuda:0'
         
-        # Set quantization for bitsandbytes
-        if optimization_strategy == 'none':
+        # Set quantization for bnb
+        if 'none' in optimization_strategy:
 
             # Initialize the tokenizer
             tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
@@ -161,24 +161,24 @@ def start_llm(optimization_strategy):
                 device_map=device_map
             )
         
-        elif 'bitsandbytes' in optimization_strategy.split(' '):
+        elif 'bnb' in optimization_strategy:
             quantization_config = None
 
-            if optimization_strategy == 'bitsandbytes eight bit':
+            if 'bnb eight bit' in optimization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_8bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif optimization_strategy == 'bitsandbytes four bit':
+            elif 'bnb four bit' in optimization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif optimization_strategy == 'bitsandbytes four bit nf4':
+            elif 'bnb four bit nf4' in optimization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -186,7 +186,7 @@ def start_llm(optimization_strategy):
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif optimization_strategy == 'bitsandbytes nested four bit':
+            elif 'bnb nested four bit' in optimization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -194,7 +194,7 @@ def start_llm(optimization_strategy):
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif optimization_strategy == 'bitsandbytes nested four bit nf4':
+            elif 'bnb nested four bit nf4' in optimization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -213,18 +213,9 @@ def start_llm(optimization_strategy):
                 quantization_config=quantization_config
             )
 
-        elif optimization_strategy == 'bettertransformer':
+        if 'bt' in optimization_strategy:
 
-            # Initialize the tokenizer
-            tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
-
-            # Initialize model
-            model = AutoModelForSeq2SeqLM.from_pretrained(
-                'haining/scientific_abstract_simplification', 
-                device_map=device_map
-            )
-
-            model.to_bettertransformer()
+            model.to_bt()
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
