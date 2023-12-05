@@ -71,7 +71,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
                     # Collect run parameters to results
                     results.data['abstract'].append(row_count)
                     results.data['optimization strategy'].append(optimization_strategy)
-                    results.data['model memory (bytes)'].append(model_memory_footprint)
+                    results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
                     print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
 
                     # Do and time the summary
@@ -252,7 +252,7 @@ class Results:
         self.data['optimization strategy'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
-        self.data['model memory (bytes)'] = []
+        self.data['model GPU memory footprint (bytes)'] = []
 
     def save_result(self, overwrite = False):
 
