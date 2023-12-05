@@ -7,7 +7,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig,
 
 def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, optimization_strategies):
     
-    print(f'\nRunning huggingface GPU inference optimization benchmark. Resume = {resume}\n')
+    print(f'\nRunning huggingface GPU inference optimization benchmark. Resume = {resume}.\n')
 
     # If we are resuming a prior run, read old data and collect the
     # completed conditions as a list of lists so we can skip them
@@ -44,7 +44,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
         # Fire up the model for this run
         model, tokenizer, gen_cfg = start_llm(optimization_strategy)
-        print(f'Model memory footprint: {model.get_memory_footprint()}')
+        model_memory_footprint = model.get_memory_footprint()
 
         # Get rows from abstracts table
         rows = get_rows(db_name, user, passwd, host, num_abstracts)
@@ -71,6 +71,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
                     # Collect run parameters to results
                     results.data['abstract'].append(row_count)
                     results.data['optimization strategy'].append(optimization_strategy)
+                    results.data['model memory (bytes)'].append(model_memory_footprint)
                     print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
 
                     # Do and time the summary
@@ -208,6 +209,7 @@ class Results:
         self.data['optimization strategy'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
+        self.data['model memory (bytes)'] = []
 
     def save_result(self, overwrite = False):
 

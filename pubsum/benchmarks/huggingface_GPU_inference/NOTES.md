@@ -233,6 +233,12 @@ bitsandbytes/nn/modules.py:226: UserWarning: Input type into Linear4bit is torch
   warnings.warn(f'Input type into Linear4bit is torch.float16, but bnb_4bit_compute_type=torch.float32 (default). This will lead to slow inference or training speed.')
 ```
 
+Fixed by adding the following to model load:
+
+```
+bnb_4bit_compute_dtype=torch.float16
+```
+
 ## 3. Also, sometimes getting the following warning
 
 ```
