@@ -1,4 +1,5 @@
 import os
+import gc
 import pandas as pd
 import psycopg2
 import time
@@ -78,6 +79,14 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
                     summarization_start = time.time()
                     summary = summarize(abstract, model, tokenizer, gen_cfg, optimization_strategy)
                     dT = time.time() - summarization_start
+
+                    # Get max memory used and reset
+                    max_memory = torch.cuda.max_memory_allocated()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
+
+                    # Collect data
+                    results.data['max memory allocated (bytes)'].append(max_memory)
                     results.data['summarization time (sec.)'].append(dT)
                     results.data['summarization rate (abstracts/sec.)'].append(1/dT)
 
@@ -92,7 +101,9 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
         # Get rid of model and tokenizer from run, free up memory
         del model
         del tokenizer
+        gc.collect()
         torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
 
         print('Done.\n')
 
@@ -201,6 +212,19 @@ def start_llm(optimization_strategy):
                 device_map=device_map,
                 quantization_config=quantization_config
             )
+
+        elif optimization_strategy == 'bettertransformer':
+
+            # Initialize the tokenizer
+            tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
+
+            # Initialize model
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                'haining/scientific_abstract_simplification', 
+                device_map=device_map
+            )
+
+            model.to_bettertransformer()
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
@@ -253,6 +277,7 @@ class Results:
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
         self.data['model GPU memory footprint (bytes)'] = []
+        self.data['max memory allocated (bytes)'] = []
 
     def save_result(self, overwrite = False):
 
