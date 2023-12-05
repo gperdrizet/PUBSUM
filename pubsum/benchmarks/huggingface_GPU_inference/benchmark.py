@@ -3,7 +3,7 @@ import pandas as pd
 import psycopg2
 import time
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig, GPTQConfig
 
 def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, optimization_strategies):
     
@@ -193,11 +193,11 @@ def start_llm(optimization_strategy):
                 )
 
             # Initialize the tokenizer
-            tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+            tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
 
             # Initialize model
             model = AutoModelForSeq2SeqLM.from_pretrained(
-                "haining/scientific_abstract_simplification", 
+                'haining/scientific_abstract_simplification', 
                 device_map=device_map,
                 quantization_config=quantization_config
             )

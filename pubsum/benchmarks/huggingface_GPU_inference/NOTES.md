@@ -1,7 +1,9 @@
 # Notes
 
 ## 1. FlashAttention-2 not implemented by model
-## 2. Attempting to load model with 8 bit quantization gives the following error
+
+## 2. autoGPTQ does not support T5 models
+## 3. Attempting to load model with 8 bit quantization gives the following error
 
 ```
 Error named symbol not found at line 529 in file /mmfs1/gscratch/zlab/timdettmers/git/bitsandbytes/csrc/ops.cu
@@ -242,7 +244,8 @@ bnb_4bit_compute_dtype=torch.float16
 ```
 
 Note: this is different from the torch.bfloat16 suggested in the [huggingface docs](https://huggingface.co/docs/transformers/main_classes/quantization).
-## 3. Also, sometimes getting the following warning
+
+## 4. Also, sometimes getting the following warning
 
 ```
 huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...

@@ -30,7 +30,7 @@ device_map_benchmark_results_dir = f'{benchmark_dir}/huggingface_device_map'
 device_map_benchmark_abstracts = 16
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
 
-# Huggingface GPU inference optimization benchmark
+# Huggingface model quantization benchmark
 gpu_inference_benchmark_results_dir = f'{benchmark_dir}/huggingface_GPU_inference'
 gpu_inference_benchmark_abstracts = 3
 gpu_inference_benchmark_optimization_strategies = [
