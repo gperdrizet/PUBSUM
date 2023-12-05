@@ -6,9 +6,9 @@ import time
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig, GPTQConfig
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, optimization_strategies):
+def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, quantization_strategies):
     
-    print(f'\nRunning huggingface GPU inference optimization benchmark. Resume = {resume}.\n')
+    print(f'\nRunning model quantization benchmark. Resume = {resume}.\n')
 
     # If we are resuming a prior run, read old data and collect the
     # completed conditions as a list of lists so we can skip them
@@ -21,7 +21,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
             completed_runs = list(zip(
                 old_results_df['abstract'].to_list(),
-                old_results_df['optimization strategy'].to_list()
+                old_results_df['quantization strategy'].to_list()
             ))
 
             print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
@@ -39,12 +39,12 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
         # Set completed runs to empty list
         completed_runs = []
 
-    for optimization_strategy in optimization_strategies:
+    for quantization_strategy in quantization_strategies:
 
-        print(f'Starting benchmark run on {num_abstracts} abstracts with GPU inference optimization strategy {optimization_strategy}.')
+        print(f'Starting benchmark run on {num_abstracts} abstracts with model strategy {quantization_strategy}.')
 
         # Fire up the model for this run
-        model, tokenizer, gen_cfg = start_llm(optimization_strategy)
+        model, tokenizer, gen_cfg = start_llm(quantization_strategy)
         model_memory_footprint = model.get_memory_footprint()
 
         # Get rows from abstracts table
@@ -55,7 +55,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
         for row in rows:
 
-            run_tuple = (row_count, optimization_strategy)
+            run_tuple = (row_count, quantization_strategy)
 
             if run_tuple not in completed_runs:
 
@@ -71,13 +71,13 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
                     # Collect run parameters to results
                     results.data['abstract'].append(row_count)
-                    results.data['optimization strategy'].append(optimization_strategy)
+                    results.data['quantization strategy'].append(quantization_strategy)
                     results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
                     print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
 
                     # Do and time the summary
                     summarization_start = time.time()
-                    summary = summarize(abstract, model, tokenizer, gen_cfg, optimization_strategy)
+                    summary = summarize(abstract, model, tokenizer, gen_cfg, quantization_strategy)
                     dT = time.time() - summarization_start
 
                     # Get max memory used and reset
@@ -144,13 +144,13 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     return rows
 
 
-def start_llm(optimization_strategy):
+def start_llm(quantization_strategy):
         
         # Place model on single GPU
         device_map = 'cuda:0'
         
         # Set quantization for bnb
-        if 'none' in optimization_strategy:
+        if 'none' in quantization_strategy:
 
             # Initialize the tokenizer
             tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
@@ -160,25 +160,23 @@ def start_llm(optimization_strategy):
                 "haining/scientific_abstract_simplification", 
                 device_map=device_map
             )
-        
-        elif 'bnb' in optimization_strategy:
-            quantization_config = None
 
-            if 'bnb eight bit' in optimization_strategy:
+        elif 'none' not in quantization_strategy:
+            if 'eight bit' in quantization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_8bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif 'bnb four bit' in optimization_strategy:
+            elif 'four bit' in quantization_strategy and 'nf4' not in quantization_strategy and 'nested' not in quantization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif 'bnb four bit nf4' in optimization_strategy:
+            elif 'four bit nf4' in quantization_strategy and 'nested' not in quantization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -186,7 +184,7 @@ def start_llm(optimization_strategy):
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif 'bnb nested four bit' in optimization_strategy:
+            elif 'nested four bit' in quantization_strategy and 'nf4' not in quantization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -194,7 +192,7 @@ def start_llm(optimization_strategy):
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
-            elif 'bnb nested four bit nf4' in optimization_strategy:
+            elif 'nested four bit nf4' in quantization_strategy:
 
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True, 
@@ -213,7 +211,7 @@ def start_llm(optimization_strategy):
                 quantization_config=quantization_config
             )
 
-        if 'bt' in optimization_strategy:
+        if 'BT' in quantization_strategy:
 
             model.to_bettertransformer()
         
@@ -264,7 +262,7 @@ class Results:
         # Independent vars for run
         self.data = {}
         self.data['abstract'] = []
-        self.data['optimization strategy'] = []
+        self.data['quantization strategy'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
         self.data['model GPU memory footprint (bytes)'] = []
