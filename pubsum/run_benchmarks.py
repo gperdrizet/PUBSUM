@@ -4,8 +4,9 @@ import config as conf
 import benchmarks.load_summarize_insert.benchmark as lsi
 import benchmarks.sql_insert.benchmark as sql
 import benchmarks.huggingface_device_map.benchmark as device_map
-import benchmarks.huggingface_GPU_inference.benchmark as GPU_inference
+import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarize.benchmark as parallel
+import benchmarks.batched_inference.benchmark as batched_inference
 
 ###########################
 # Benchmarking parameters #
@@ -31,22 +32,28 @@ device_map_benchmark_abstracts = 16
 device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
 
 # Huggingface model quantization benchmark
-gpu_inference_benchmark_results_dir = f'{benchmark_dir}/huggingface_GPU_inference'
-gpu_inference_benchmark_abstracts = 30
-gpu_inference_benchmark_optimization_strategies = [
+model_quantization_benchmark_results_dir = f'{benchmark_dir}/model_quantization'
+model_quantization_benchmark_abstracts = 3
+model_quantization_benchmark_quantization_strategies = [
     'none',
-    'bnb eight bit', 
-    'bnb four bit', 
-    'bnb four bit nf4',
-    'bnb nested four bit',
-    'bnb nested four bit nf4',
-    'none + bt',
-    'bnb eight bit + bt', 
-    'bnb four bit + bt', 
-    'bnb four bit nf4 + bt',
-    'bnb nested four bit + bt',
-    'bnb nested four bit nf4 + bt',
+    'eight bit', 
+    'four bit', 
+    'four bit nf4',
+    'nested four bit',
+    'nested four bit nf4',
+    'none + BT',
+    'eight bit + BT', 
+    'four bit + BT', 
+    'four bit nf4 + BT',
+    'nested four bit + BT',
+    'nested four bit nf4 + BT',
 ]
+
+# Batched inference benchmark
+batched_inference_benchmark_results_dir = f'{benchmark_dir}/batched_inference'
+batched_inference_benchmark_abstracts = 4
+batched_inference_benchmark_replicates = 3
+batched_inference_benchmark_batch_sizes = [1, 2]
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
@@ -93,10 +100,17 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        '--hf_GPU_inference',
+        '--model_quantization',
         choices=[str(True), str(False)],
         default=str(False),
-        help='Run huggingface GPU inference benchmark?'
+        help='Run model quantization benchmark?'
+    )
+
+    parser.add_argument(
+        '--batched_inference',
+        choices=[str(True), str(False)],
+        default=str(False),
+        help='Run inference batch size benchmark?'
     )
 
     parser.add_argument(
@@ -164,22 +178,38 @@ if __name__ == "__main__":
             device_map_strategies
         )
 
-    # Huggingface GPU inference optimization benchmark
-    if args.hf_GPU_inference == 'True':
+    # Model quantization benchmark
+    if args.model_quantization == 'True':
 
         # Silence parallelism warning
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 
-        GPU_inference.benchmark(
+        quantization.benchmark(
             conf.DB_NAME,
             conf.USER,
             conf.PASSWD, 
             conf.HOST,
             args.resume,
-            gpu_inference_benchmark_results_dir,
-            gpu_inference_benchmark_abstracts,
-            gpu_inference_benchmark_optimization_strategies
+            model_quantization_benchmark_results_dir,
+            model_quantization_benchmark_abstracts,
+            model_quantization_benchmark_quantization_strategies
         )
+
+    # Batched inference benchmark
+    if args.batched_inference == 'True':
+
+        batched_inference.benchmark(
+            conf.DB_NAME,
+            conf.USER,
+            conf.PASSWD, 
+            conf.HOST,
+            args.resume,
+            batched_inference_benchmark_results_dir,
+            batched_inference_benchmark_abstracts,
+            batched_inference_benchmark_replicates,
+            batched_inference_benchmark_batch_sizes
+        )
+
 
     # Data parallel summarization benchmark
     if args.parallel_summarize == 'True':
