@@ -2,7 +2,8 @@ import os
 import pandas as pd
 import psycopg2
 import time
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig
 
 def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, optimization_strategies):
     
@@ -16,7 +17,6 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
         if os.path.exists(f'{results_dir}/results.csv'):
 
             old_results_df = pd.read_csv(f'{results_dir}/results.csv')
-            print(old_results_df.info())
 
             completed_runs = list(zip(
                 old_results_df['abstract'].to_list(),
@@ -44,6 +44,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, o
 
         # Fire up the model for this run
         model, tokenizer, gen_cfg = start_llm(optimization_strategy)
+        print(f'Model memory footprint: {model.get_memory_footprint()}')
 
         # Get rows from abstracts table
         rows = get_rows(db_name, user, passwd, host, num_abstracts)
@@ -129,23 +130,29 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
 def start_llm(optimization_strategy):
         
         # Set quantization if any
-        four_bit = False
+        #four_bit = False
         eight_bit = False
+        quantization_config = None
 
-        if optimization_strategy == 'Eight bit quantization':
+        if optimization_strategy == 'eight bit quantization':
             eight_bit = True
 
-        elif optimization_strategy == 'Four bit quantization':
-            four_bit = True
+        elif optimization_strategy == 'four bit quantization':
+            #four_bit = True
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True, 
+                bnb_4bit_compute_dtype=torch.float16
+            )
+
         
         # Set device map to run model on one GPU
         device_map = 'cuda:0'
 
         model = AutoModelForSeq2SeqLM.from_pretrained(
             "haining/scientific_abstract_simplification", 
-            device_map = device_map,
-            load_in_4bit = four_bit,
-            load_in_8bit = eight_bit
+            device_map=device_map,
+            load_in_8bit=eight_bit,
+            quantization_config=quantization_config
         )
         
         # Load generation config from model and set some parameters as desired
