@@ -215,7 +215,7 @@ def start_llm(optimization_strategy):
 
         if 'bt' in optimization_strategy:
 
-            model.to_bt()
+            model.to_bettertransformer()
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
