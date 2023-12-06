@@ -7,6 +7,7 @@ import benchmarks.huggingface_device_map.benchmark as device_map
 import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarize.benchmark as parallel
 import benchmarks.batched_inference.benchmark as batched_inference
+import benchmarks.parallel_batched_summarize.benchmark as parallel_batched
 
 ###########################
 # Benchmarking parameters #
@@ -64,6 +65,14 @@ parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
 parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
 parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
 
+# Data parallel batched summarization benchmark
+parallel_batched_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_batched_summarize'
+parallel_batched_summarize_benchmark_rounds = 3
+parallel_batched_summarize_benchmark_replicates = 5
+parallel_batched_summarize_benchmark_batch_size = [1, 2, 4, 8, 16]
+parallel_batched_summarize_num_GPU_jobs = [4, 8, 12, 16]
+parallel_batched_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
+
 if __name__ == "__main__":
 
     ############################################################
@@ -118,6 +127,13 @@ if __name__ == "__main__":
         choices=[str(True), str(False)],
         default=str(False),
         help='Run data parallel summarization benchmark?'
+    )
+
+    parser.add_argument(
+        '--parallel_batched_summarize',
+        choices=[str(True), str(False)],
+        default=str(False),
+        help='Run data parallel batched summarization benchmark?'
     )
 
     parser.add_argument(
@@ -227,4 +243,21 @@ if __name__ == "__main__":
             parallel_summarize_num_CPU_jobs,
             parallel_summarize_num_GPU_jobs,
             parallel_summarize_gpus,
+        )
+
+    # Data parallel summarization benchmark
+    if args.batched_parallel_summarize == 'True':
+
+        parallel_batched.benchmark(
+            conf.DB_NAME,
+            conf.USER,
+            conf.PASSWD, 
+            conf.HOST,
+            args.resume,
+            parallel_batched_summarize_benchmark_results_dir,
+            parallel_batched_summarize_benchmark_rounds,
+            parallel_batched_summarize_benchmark_replicates,
+            parallel_batched_summarize_benchmark_batch_size,
+            parallel_batched_summarize_num_GPU_jobs,
+            parallel_batched_summarize_gpus
         )
