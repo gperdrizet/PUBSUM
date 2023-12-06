@@ -93,7 +93,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, r
                 # Collect data
                 results.data['max memory allocated (bytes)'].append(max_memory)
                 results.data['summarization time (sec.)'].append(dT)
-                results.data['summarization rate (abstracts/sec.)'].append(1/dT)
+                results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
 
                 # Save the result
                 results.save_result()
