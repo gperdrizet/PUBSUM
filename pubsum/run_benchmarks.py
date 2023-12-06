@@ -33,7 +33,7 @@ device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'bal
 
 # Huggingface model quantization benchmark
 model_quantization_benchmark_results_dir = f'{benchmark_dir}/model_quantization'
-model_quantization_benchmark_abstracts = 3
+model_quantization_benchmark_abstracts = 10
 model_quantization_benchmark_quantization_strategies = [
     'none',
     'eight bit', 
@@ -51,9 +51,9 @@ model_quantization_benchmark_quantization_strategies = [
 
 # Batched inference benchmark
 batched_inference_benchmark_results_dir = f'{benchmark_dir}/batched_inference'
-batched_inference_benchmark_abstracts = 4
-batched_inference_benchmark_replicates = 3
-batched_inference_benchmark_batch_sizes = [1, 2]
+batched_inference_benchmark_abstracts = 16
+batched_inference_benchmark_replicates = 5
+batched_inference_benchmark_batch_sizes = [1, 2, 4, 8, 16]
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
