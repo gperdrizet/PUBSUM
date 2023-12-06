@@ -109,7 +109,10 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, r
         total_summarization_time = 0
         total_insert_time = 0
 
-        for row in read_cursor:
+        # Get rows from abstracts table
+        rows = get_rows(db_name, user, passwd, host, num_abstracts)
+
+        for row in rows:
 
             row_count += 1
 
@@ -205,6 +208,40 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, r
         replicate += 1
 
         print('Done.')
+
+def get_rows(db_name, user, passwd, host, num_abstracts):
+        
+    # Open connection to PUBMED database on postgreSQL server, create connection
+    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
+
+    # Start new reader cursor
+    read_cursor = connection.cursor()
+
+    # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
+    # the article parsing script and not put empty abstracts into the SQL database. Let's do
+    # that later, but this will work for now to get us were we want to go. Also, this is not
+    # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
+    # is irrelevant
+
+    # Get 2x the number of rows we want
+    read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
+
+    # Collect non-empty rows until we have enough
+    rows = []
+
+    for row in read_cursor:
+
+        abstract = row[1]
+
+        if abstract != None:
+            rows.append(row)
+
+        if len(rows) == num_abstracts:
+            break
+        
+    read_cursor.close()
+
+    return rows
 
 class Results:
     '''Class to hold objects and methods for
