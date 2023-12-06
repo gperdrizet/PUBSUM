@@ -69,8 +69,8 @@ parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available G
 parallel_batched_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_batched_summarize'
 parallel_batched_summarize_benchmark_rounds = 3
 parallel_batched_summarize_benchmark_replicates = 5
-parallel_batched_summarize_benchmark_batch_size = [1, 2, 4, 8, 16]
-parallel_batched_summarize_num_GPU_jobs = [4, 8, 12, 16]
+parallel_batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16]
+parallel_batched_summarize_GPU_jobs = [4, 8, 12, 16]
 parallel_batched_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
 
 if __name__ == "__main__":
@@ -246,7 +246,7 @@ if __name__ == "__main__":
         )
 
     # Data parallel summarization benchmark
-    if args.batched_parallel_summarize == 'True':
+    if args.parallel_batched_summarize == 'True':
 
         parallel_batched.benchmark(
             conf.DB_NAME,
@@ -257,7 +257,7 @@ if __name__ == "__main__":
             parallel_batched_summarize_benchmark_results_dir,
             parallel_batched_summarize_benchmark_rounds,
             parallel_batched_summarize_benchmark_replicates,
-            parallel_batched_summarize_benchmark_batch_size,
-            parallel_batched_summarize_num_GPU_jobs,
+            parallel_batched_summarize_benchmark_batch_sizes,
+            parallel_batched_summarize_GPU_jobs,
             parallel_batched_summarize_gpus
         )

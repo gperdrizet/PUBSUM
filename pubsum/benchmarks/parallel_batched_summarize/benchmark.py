@@ -4,12 +4,12 @@ import psycopg2
 import time
 import torch
 import multiprocessing as mp
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig
 
 def benchmark(db_name, user, passwd, host, resume, results_dir, rounds, 
               replicates, batch_sizes, GPU_jobs, gpus):
     
-    print(f'\nRunning data parallel summarization benchmark. Resume = {resume}\n')
+    print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.\n')
 
     # If we are resuming a prior run, read old data and collect the
     # completed conditions as a list of lists so we can skip them.
@@ -21,7 +21,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
 
             completed_runs = list(zip(
                 old_results_df['replicate'].to_list(),
-                old_results_df['device map strategy'].to_list(),
+                old_results_df['batch size'].to_list(),
                 old_results_df['workers'].to_list()
             ))
 
@@ -42,98 +42,64 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
     # Build parameter sets, excluding any which are already complete
     parameter_sets = []
 
-    for device_map_strategy in device_map_strategies:
+    for batch_size in batch_sizes:
+        for workers in GPU_jobs:
+            for i in range(replicates):
+                parameter_set = (i, batch_size, workers)
 
-        # Need to handle CPU jobs differently than GPU jobs, they
-        # use different device maps and job numbers.
-        if 'CPU' in device_map_strategy.split(' '):
-            for jobs in num_CPU_jobs:
-                for i in range(replicates):
-                    parameter_set = (i, device_map_strategy, jobs)
-
-                    # Note: the device map/job number loop produces a condition
-                    # where we call for 20 jobs on physical cores only, don't add
-                    # this condition to the list because we are only working with
-                    # 10 physical cores
-                    if (parameter_set not in completed_runs) and (parameter_set[1:] != ('CPU physical cores', 20)):
-                        parameter_sets.append(parameter_set)
-
-        elif 'GPU' in device_map_strategy.split(' '):
-            for jobs in num_GPU_jobs:
-                for i in range(replicates):
-                    parameter_set = (i, device_map_strategy, jobs)
-
-                    if parameter_set not in completed_runs:
-                        parameter_sets.append(parameter_set)
+                if parameter_set not in completed_runs:
+                    parameter_sets.append(parameter_set)
 
     # Loop on parameter sets to run jobs
     for parameter_set in parameter_sets:
 
         # Split out the parameters for this run
         replicate = parameter_set[0]
-        run_device_map_strategy = parameter_set[1]
-        run_jobs = parameter_set[2]
+        batch_size = parameter_set[1]
+        workers = parameter_set[2]
 
         # Figure out how many abstracts we need to give each worker process
-        run_abstracts = num_abstracts // run_jobs
+        run_abstracts = rounds // batch_size
 
-        # Give torch CPU threads based on device map for this run, if appropriate
-        if 'CPU' in run_device_map_strategy.split(' '):
-            if run_device_map_strategy == 'CPU physical cores':
-                print(f'Run jobs: {run_jobs}')
-                torch.set_num_threads(10 // run_jobs)
-
-            elif run_device_map_strategy == 'CPU hyperthreading':
-                torch.set_num_threads(20 // run_jobs)
-
-        # If this is a GPU run, start a counter to pick GPUs for jobs
-        if 'GPU' in run_device_map_strategy.split(' '):
-            gpu_index = 0
-
-        # If this run is not using GPU(s), pass none for GPU related parameters
-        else:
-            gpu_index = None
-            gpu = None
+        # start a counter to pick GPUs for jobs
+        gpu_index = 0
 
         # Instantiate pool with one member for each job we need to run
         pool = mp.Pool(
-            processes = run_jobs,
+            processes = workers,
             maxtasksperchild = 1
         )
 
         # Make results object for run
         results = Results(results_dir)
+        results.data['rounds'].append(rounds)
         results.data['replicate'].append(replicate)
-        results.data['abstracts'].append(num_abstracts)
-        results.data['abstracts per worker'].append(run_abstracts)
-        results.data['device map strategy'].append(run_device_map_strategy)
-        results.data['workers'].append(run_jobs)
+        results.data['batch size'].append(batch_size)
+        results.data['workers'].append(workers)
 
-        print(f'\nReplicate {replicate}: starting benchmark with {run_jobs} concurrent jobs and {run_abstracts} abstracts per job using {run_device_map_strategy}.')
+        print(f'\nReplicate {replicate}: starting benchmark with {workers} concurrent processes and {batch_size} abstracts per batch.')
 
         # Start timer
         start = time.time()
 
         # Loop on jobs for this run
-        for i in list(range(0, run_jobs)):
+        for i in list(range(0, workers)):
 
-            # Pick GPU for run, if needed
-            if 'GPU' in run_device_map_strategy.split(' '):
-                gpu = gpus[gpu_index]
+            # Pick GPU
+            gpu = gpus[gpu_index]
 
             result = pool.apply_async(start_job,
-                args = (i, db_name, user, passwd, host, run_abstracts, run_device_map_strategy, gpu_index, gpu),
+                args = (i, db_name, user, passwd, host, rounds, batch_size, gpu_index, gpu),
                 callback = collect_result
             )
 
-            # Increment GPU index if needed - we have four GPUs, so when the index gets 
+            # Increment GPU index - we have four GPUs, so when the index gets 
             # to 3 (0 anchored), reset it back to 0, otherwise increment it.
-            if 'GPU' in run_device_map_strategy.split(' '):
-                if gpu_index == 3:
-                    gpu_index = 0
-                
-                else:
-                    gpu_index += 1
+            if gpu_index == 3:
+                gpu_index = 0
+            
+            else:
+                gpu_index += 1
 
         # Clean up
         pool.close()
@@ -142,43 +108,36 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
         # Stop the timer and log the result
         dT = time.time() - start
         results.data['summarization time (sec.)'].append(dT)
-        results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
+        results.data['summarization rate (abstracts/sec.)'].append((rounds * batch_size * workers)/dT)
         results.save_result()
 
 
-def start_job(i, db_name, user, passwd, host, num_abstracts, device_map_strategy, gpu_index, gpu):
+def start_job(i, db_name, user, passwd, host, rounds, batch_size, gpu_index, gpu):
     
     print(f'Job {i}: starting.')
 
-    # Assign job to GPU if needed
-    if 'GPU' in device_map_strategy.split(' '):
-        torch.cuda.set_device(gpu_index)
+    # Assign job to GPU
+    torch.cuda.set_device(gpu_index)
     
     # Fire up the model for this run
-    model, tokenizer, gen_cfg = start_llm(device_map_strategy, gpu)
+    model, tokenizer, gen_cfg = start_llm(gpu)
 
-    # Get an abstract to summarize
+    # Get abstracts to summarize
+    num_abstracts = batch_size * rounds
     rows = get_rows(db_name, user, passwd, host, num_abstracts)
 
-    row_count = 1
+    batch_count = 0
 
-    for row in rows:
+    for batch in batches(rows, batch_size):
 
-        # Get abstract text for this row
-        abstract = row[1]
+        batch_count += 1
 
-        # Make sure this abstract actually has content to be summarized
-        if abstract != None:
+        # Get abstract texts for this batch
+        abstracts = [row[1] for row in batch]
 
-            # Do the summary
-            summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
-            print(f'Job {i}: finished abstract {row_count}.')
-
-        else:
-            # Print a warning if the abstract we pulled is empty
-            print(f'Job {i}: abstract {row_count} empty.')
-
-        row_count += 1
+        # Do the summaries
+        summaries = summarize(abstracts, model, tokenizer, gen_cfg)
+        print(f'Job {i}: finished batch {batch_count}: {len(batch)} abstracts.')
 
     print(f'Job {1}: done.')
 
@@ -219,47 +178,46 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     return rows
 
 
-def start_llm(device_map_strategy, gpu):
-        
-        # Set device_map parameter value for Huggingface
+def start_llm(gpu):
 
-        if gpu == None:
-            device_map = 'cpu'
+    # Set quantization configuration
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True, 
+        bnb_4bit_compute_dtype=torch.float16
+    )
 
-        else:
-            device_map = gpu
+    # Initialize the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
 
-        # Initialize model with selected device map
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            "haining/scientific_abstract_simplification", 
-            device_map = device_map
-        )
-        
-        # Load generation config from model and set some parameters as desired
-        gen_cfg = GenerationConfig.from_model_config(model.config)
-        gen_cfg.max_length = 256
-        gen_cfg.top_p = 0.9
-        gen_cfg.do_sample = True
+    # Initialize model with selected device map
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        'haining/scientific_abstract_simplification', 
+        device_map = gpu,
+        quantization_config=quantization_config
+    )
+    
+    # Load generation config from model and set some parameters as desired
+    gen_cfg = GenerationConfig.from_model_config(model.config)
+    gen_cfg.max_length = 256
+    gen_cfg.top_p = 0.9
+    gen_cfg.do_sample = True
 
-        # Initialize the tokenizer
-        tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+    return model, tokenizer, gen_cfg
 
-        return model, tokenizer, gen_cfg
+def summarize(abstracts, model, tokenizer, gen_cfg):
 
-def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
-        
     # Prepend the prompt to this abstract and encode
+    inputs = ['summarize, simplify, and contextualize: ' + abstract for abstract in abstracts]
+        
     encoding = tokenizer(
-        'summarize, simplify, and contextualize: ' + abstract, 
+        inputs, 
         max_length = 672, 
         padding = 'max_length', 
         truncation = True, 
         return_tensors = 'pt'
     )
 
-    # Move to GPU if appropriate
-    if 'CPU' not in device_map_strategy.split(' '):
-        encoding = encoding.to('cuda')
+    encoding = encoding.to('cuda')
     
     # Generate summary
     decoded_ids = model.generate(
@@ -269,9 +227,9 @@ def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
     )
     
     # Decode summary
-    summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
+    summaries = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
 
-    return summary
+    return summaries
 
 def collect_result(result):
     # Need a dummy return here since we don't have good logging setup
@@ -290,11 +248,10 @@ class Results:
 
         # Independent vars for run
         self.data = {}
+        self.data['rounds'] = []
         self.data['replicate'] = []
-        self.data['abstracts'] = []
-        self.data['abstracts per worker'] = []
+        self.data['batch size'] = []
         self.data['workers'] = []
-        self.data['device map strategy'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
 
@@ -314,3 +271,8 @@ class Results:
 
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
+
+def batches(lst, n):
+    '''Yield successive n-sized chunks from lst.'''
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
