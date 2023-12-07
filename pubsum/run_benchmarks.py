@@ -6,12 +6,20 @@ import benchmarks.sql_insert.benchmark as sql
 import benchmarks.huggingface_device_map.benchmark as device_map
 import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarize.benchmark as parallel
-import benchmarks.batched_inference.benchmark as batched_inference
+import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarize.benchmark as parallel_batched
 
 ###########################
 # Benchmarking parameters #
 ###########################
+
+# SQL server info
+SQL_SERVER_KWARGS = {
+    'db_name': conf.DB_NAME,
+    'user': conf.USER,
+    'passwd': conf.PASSWD,
+    'host': conf.HOST
+}
 
 # Benchmarks parent dir
 benchmark_dir = f'{conf.PROJECT_ROOT_PATH}/benchmarks/'
@@ -50,13 +58,14 @@ model_quantization_benchmark_quantization_strategies = [
     'nested four bit nf4 + BT',
 ]
 
-# Batched inference benchmark
-batched_inference_benchmark_results_dir = f'{benchmark_dir}/batched_inference'
-batched_inference_benchmark_replicates = 5
-batched_inference_benchmark_batches = 3
-batched_inference_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128]
+# Batched summarization benchmark (+/- model quantization)
+batched_summarize_benchmark_results_dir = f'{benchmark_dir}/batched_summarization'
+batched_summarize_benchmark_replicates = 5
+batched_summarize_benchmark_batches = 3
+batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128]
+batched_summarize_quantization_strategies = ['none', 'four bit']
 
-# Data parallel summarization benchmark
+# Data parallel summarization benchmark (+/- model quantization)
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
 parallel_summarize_benchmark_abstracts = 120
 parallel_summarize_benchmark_replicates = 5
@@ -64,15 +73,16 @@ parallel_summarize_device_map_strategies = ['GPU', 'CPU physical cores', 'CPU hy
 parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
 parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
 parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
+parallel_summarize_quantization_strategies = ['none', 'four bit']
 
-# Data parallel batched summarization benchmark
+# Data parallel batched summarization benchmark (+/- model quantization)
 parallel_batched_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_batched_summarize'
 parallel_batched_summarize_benchmark_replicates = 5
 parallel_batched_summarize_benchmark_batches = 3
 parallel_batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32]
 parallel_batched_summarize_GPU_jobs = [4, 8, 12, 16, 20, 24]
 parallel_batched_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
-parallel_batched_summarize_model_quantization = ['none', 'four bit']
+parallel_batched_summarize_quantization_strategies = ['none', 'four bit']
 
 if __name__ == "__main__":
 
@@ -117,21 +127,21 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        '--batched_inference',
+        '--batched_summarization',
         choices=[str(True), str(False)],
         default=str(False),
-        help='Run inference batch size benchmark?'
+        help='Run batched summarization benchmark?'
     )
 
     parser.add_argument(
-        '--parallel_summarize',
+        '--parallel_summarization',
         choices=[str(True), str(False)],
         default=str(False),
         help='Run data parallel summarization benchmark?'
     )
 
     parser.add_argument(
-        '--parallel_batched_summarize',
+        '--parallel_batched_summarization',
         choices=[str(True), str(False)],
         default=str(False),
         help='Run data parallel batched summarization benchmark?'
@@ -212,24 +222,22 @@ if __name__ == "__main__":
             model_quantization_benchmark_quantization_strategies
         )
 
-    # Batched inference benchmark
-    if args.batched_inference == 'True':
+    # Batched summarization benchmark
+    if args.batched_summarization == 'True':
 
-        batched_inference.benchmark(
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            batched_inference_benchmark_results_dir,
-            batched_inference_benchmark_replicates,
-            batched_inference_benchmark_batches,
-            batched_inference_benchmark_batch_sizes
+        batched_summarization.benchmark(
+            resume = args.resume,
+            results_dir = f'{benchmark_dir}/batched_summarization',
+            replicates = 5,
+            batches = 3,
+            batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128],
+            quantization_strategies = ['none', 'four bit'],
+            **SQL_SERVER_KWARGS
         )
 
 
     # Data parallel summarization benchmark
-    if args.parallel_summarize == 'True':
+    if args.parallel_summarization == 'True':
 
         parallel.benchmark(
             conf.DB_NAME,
@@ -247,7 +255,7 @@ if __name__ == "__main__":
         )
 
     # Data parallel batched summarization benchmark
-    if args.parallel_batched_summarize == 'True':
+    if args.parallel_batched_summarization == 'True':
 
         parallel_batched.benchmark(
             conf.DB_NAME,
