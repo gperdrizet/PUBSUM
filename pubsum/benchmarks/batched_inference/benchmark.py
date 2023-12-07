@@ -6,7 +6,7 @@ import time
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig, GPTQConfig
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, replicates, batch_sizes):
+def benchmark(db_name, user, passwd, host, resume, results_dir, replicates, batches, batch_sizes):
     
     print(f'\nRunning batched inference benchmark. Resume = {resume}.\n')
 
@@ -46,64 +46,73 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, r
 
             if run_tuple not in completed_runs:
 
-                print(f'Starting benchmark run on {num_abstracts} abstracts with batch size {batch_size}, replicate {replicate}.')
+                print(f'\nBatched summarization, replicate {replicate}.')
+                print(f' Replicate: {replicate}')
+                print(f' Batch size: {batch_size}')
+                print(f' Batches: {batches}')
 
-                # Fire up the model for this run
-                model, tokenizer, gen_cfg = start_llm()
-                model_memory_footprint = model.get_memory_footprint()
+                try:
+                    # Fire up the model for this run
+                    model, tokenizer, gen_cfg = start_llm()
+                    model_memory_footprint = model.get_memory_footprint()
 
-                # Get rows from abstracts table
-                rows = get_rows(db_name, user, passwd, host, num_abstracts)
+                    # Get rows from abstracts table
+                    num_abstracts = batches * batch_size
+                    rows = get_rows(db_name, user, passwd, host, num_abstracts)
 
-                batch_count = 0
+                    batch_count = 0
 
-                # Instantiate results object for this run
-                results = Results(results_dir)
+                    # Star the clock
+                    summarization_start = time.time()
 
-                # Collect run parameters to results
-                results.data['abstracts'].append(num_abstracts)
-                results.data['replicate'].append(replicate)
-                results.data['batch size'].append(batch_size)
-                results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
+                    for batch in generate_batches(rows, batch_size):
 
-                # Star the clock
-                summarization_start = time.time()
+                        batch_count += 1
 
-                for batch in batches(rows, batch_size):
+                        print(f'Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
 
-                    batch_count += 1
+                        # Get abstract texts for this batch
+                        abstracts = [row[1] for row in batch]
 
-                    print(f'Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
+                        # Do the summary
+                        summaries = summarize(abstracts, model, tokenizer, gen_cfg)
 
-                    # Get PMCIDs and abstract texts for this batch
-                    pmcids = [row[0] for row in batch]
-                    abstracts = [row[1] for row in batch]
+                    # Stop the clock
+                    dT = time.time() - summarization_start
 
-                    # Do the summary
-                    summary = summarize(abstracts, model, tokenizer, gen_cfg)
+                    # Get max memory used and reset
+                    max_memory = torch.cuda.max_memory_allocated()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
 
-                # Stop the clock
-                dT = time.time() - summarization_start
+                    # Save results
 
-                # Get max memory used and reset
-                max_memory = torch.cuda.max_memory_allocated()
-                torch.cuda.empty_cache()
-                torch.cuda.reset_peak_memory_stats()
+                    # Instantiate results object for this run
+                    results = Results(results_dir)
 
-                # Collect data
-                results.data['max memory allocated (bytes)'].append(max_memory)
-                results.data['summarization time (sec.)'].append(dT)
-                results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
+                    # Collect data
+                    results.data['abstracts'].append(num_abstracts)
+                    results.data['replicate'].append(replicate)
+                    results.data['rounds'].append(rounds)
+                    results.data['batch size'].append(batch_size)
+                    results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
+                    results.data['max memory allocated (bytes)'].append(max_memory)
+                    results.data['summarization time (sec.)'].append(dT)
+                    results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
 
-                # Save the result
-                results.save_result()
+                    # Save the result
+                    results.save_result()
 
-            # Get rid of model and tokenizer from run, free up memory
-            del model
-            del tokenizer
-            gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats()
+                    # Get rid of model and tokenizer from run, free up memory
+                    del model
+                    del tokenizer
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
+
+                except torch.cuda.OutOfMemoryError as oom:
+                    print(f'{oom}')
+                    break
 
             print('Done.\n')
 
@@ -165,7 +174,7 @@ def start_llm():
             quantization_config=quantization_config
         )
 
-        model.to_bettertransformer()
+        #model.to_bettertransformer()
         
         # Load generation config from model and set some parameters as desired
         gen_cfg = GenerationConfig.from_model_config(model.config)
@@ -201,6 +210,7 @@ def summarize(abstracts, model, tokenizer, gen_cfg):
     # Decode summaries
     summaries = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
 
+
     return summaries
 
 class Results:
@@ -216,6 +226,7 @@ class Results:
         self.data = {}
         self.data['abstracts'] = []
         self.data['replicate'] = []
+        self.data['rounds'] = []
         self.data['batch size'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
@@ -240,7 +251,7 @@ class Results:
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
 
-def batches(lst, n):
+def generate_batches(lst, n):
     '''Yield successive n-sized chunks from lst.'''
     for i in range(0, len(lst), n):
         yield lst[i:i + n]

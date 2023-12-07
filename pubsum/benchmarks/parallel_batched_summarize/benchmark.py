@@ -6,8 +6,8 @@ import torch
 import multiprocessing as mp
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, rounds, 
-              replicates, batch_sizes, GPU_jobs, gpus):
+def benchmark(db_name, user, passwd, host, resume, results_dir, batches, 
+              replicates, batch_sizes, GPU_jobs, gpus, model_quantization):
     
     print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.\n')
 
@@ -22,7 +22,8 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
             completed_runs = list(zip(
                 old_results_df['replicate'].to_list(),
                 old_results_df['batch size'].to_list(),
-                old_results_df['workers'].to_list()
+                old_results_df['workers'].to_list(),
+                old_results_df['quantization'].to_list()
             ))
 
             print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
@@ -41,25 +42,34 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
 
     # Build parameter sets, excluding any which are already complete
     parameter_sets = []
+    for quantization in model_quantization:
+        for batch_size in batch_sizes:
+            for workers in GPU_jobs:
+                for i in range(replicates):
+                    parameter_set = (i, batch_size, workers, quantization)
 
-    for batch_size in batch_sizes:
-        for workers in GPU_jobs:
-            for i in range(replicates):
-                parameter_set = (i, batch_size, workers)
-
-                if parameter_set not in completed_runs:
-                    parameter_sets.append(parameter_set)
+                    if parameter_set not in completed_runs:
+                        parameter_sets.append(parameter_set)
 
     # Loop on parameter sets to run jobs
+    parameter_set_count = 0
+
     for parameter_set in parameter_sets:
+
+        parameter_set_count += 1
 
         # Split out the parameters for this run
         replicate = parameter_set[0]
         batch_size = parameter_set[1]
         workers = parameter_set[2]
+        quantization = parameter_set[3]
 
-        # Figure out how many abstracts we need to give each worker process
-        run_abstracts = rounds // batch_size
+        print(f'\nParallel batched summarization, remaining runs: {len(parameter_sets) - parameter_set_count}')
+        print(f' Replicate: {replicate}')
+        print(f' Workers: {workers}')
+        print(f' Batch size: {batch_size}')
+        print(f' Batches: {batches}')
+        print(f' Model quantization: {quantization}\n')
 
         # start a counter to pick GPUs for jobs
         gpu_index = 0
@@ -70,17 +80,10 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
             maxtasksperchild = 1
         )
 
-        # Make results object for run
-        results = Results(results_dir)
-        results.data['rounds'].append(rounds)
-        results.data['replicate'].append(replicate)
-        results.data['batch size'].append(batch_size)
-        results.data['workers'].append(workers)
-
-        print(f'\nReplicate {replicate}: starting benchmark with {workers} concurrent processes and {batch_size} abstracts per batch.')
-
         # Start timer
         start = time.time()
+
+        async_results = []
 
         # Loop on jobs for this run
         for i in list(range(0, workers)):
@@ -88,9 +91,10 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
             # Pick GPU
             gpu = gpus[gpu_index]
 
-            result = pool.apply_async(start_job,
-                args = (i, db_name, user, passwd, host, rounds, batch_size, gpu_index, gpu),
-                callback = collect_result
+            async_results.append(
+                pool.apply_async(start_job,
+                    args = (i, db_name, user, passwd, host, batches, batch_size, gpu_index, gpu, quantization)
+                )
             )
 
             # Increment GPU index - we have four GPUs, so when the index gets 
@@ -105,39 +109,60 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, rounds,
         pool.close()
         pool.join()
 
-        # Stop the timer and log the result
+        # Stop the timer
         dT = time.time() - start
-        results.data['summarization time (sec.)'].append(dT)
-        results.data['summarization rate (abstracts/sec.)'].append((rounds * batch_size * workers)/dT)
-        results.save_result()
+
+        # Get the results
+        result = [async_result.get() for async_result in async_results]
+        print(f'Async results: {result}')
+
+        # Collect and save data, unless we had a problem
+        if False not in result:
+            results = Results(results_dir)
+            results.data['abstracts'].append(batches * batch_size * workers)
+            results.data['batches'].append(batches)
+            results.data['replicate'].append(replicate)
+            results.data['batch size'].append(batch_size)
+            results.data['workers'].append(workers)
+            results.data['jobs per GPU'].append(workers // 4)
+            results.data['quantization'].append(quantization)
+            results.data['summarization time (sec.)'].append(dT)
+            results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
+            results.save_result()
 
 
-def start_job(i, db_name, user, passwd, host, rounds, batch_size, gpu_index, gpu):
+def start_job(i, db_name, user, passwd, host, batches, batch_size, gpu_index, gpu, quantization):
     
-    print(f'Job {i}: starting.')
+    print(f'Job {i}: starting on {gpu}.')
 
-    # Assign job to GPU
-    torch.cuda.set_device(gpu_index)
+    try:
+        # Assign job to GPU
+        torch.cuda.set_device(gpu_index)
     
-    # Fire up the model for this run
-    model, tokenizer, gen_cfg = start_llm(gpu)
+        # Fire up the model for this run
+        model, tokenizer, gen_cfg = start_llm(gpu, quantization)
 
-    # Get abstracts to summarize
-    num_abstracts = batch_size * rounds
-    rows = get_rows(db_name, user, passwd, host, num_abstracts)
+        # Get abstracts to summarize
+        num_abstracts = batch_size * batches
+        rows = get_rows(db_name, user, passwd, host, num_abstracts)
 
-    batch_count = 0
+        batch_count = 0
 
-    for batch in batches(rows, batch_size):
+        for batch in generate_batches(rows, batch_size):
 
-        batch_count += 1
+            batch_count += 1
 
-        # Get abstract texts for this batch
-        abstracts = [row[1] for row in batch]
+            # Get abstract texts for this batch
+            abstracts = [row[1] for row in batch]
 
-        # Do the summaries
-        summaries = summarize(abstracts, model, tokenizer, gen_cfg)
-        print(f'Job {i}: finished batch {batch_count}: {len(batch)} abstracts.')
+            # Do the summaries
+            summaries = summarize(abstracts, model, tokenizer, gen_cfg)
+            print(f'Job {i}: finished batch {batch_count} of {batches}: {len(batch)} abstracts.')
+
+    except torch.cuda.OutOfMemoryError as oom:
+
+        print(f'{oom}')
+        return False
 
     print(f'Job {1}: done.')
 
@@ -178,13 +203,18 @@ def get_rows(db_name, user, passwd, host, num_abstracts):
     return rows
 
 
-def start_llm(gpu):
+def start_llm(gpu, quantization):
 
     # Set quantization configuration
     quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True, 
-        bnb_4bit_compute_dtype=torch.float16
+        load_in_4bit=False
     )
+
+    if quantization == 'four bit':
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=False, 
+            bnb_4bit_compute_dtype=torch.float16
+        )
 
     # Initialize the tokenizer
     tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
@@ -231,12 +261,6 @@ def summarize(abstracts, model, tokenizer, gen_cfg):
 
     return summaries
 
-def collect_result(result):
-    # Need a dummy return here since we don't have good logging setup
-    # this ensures that anything that a worker process sends to STDOUT
-    # or STDERR actually shows up in the terminal
-    return True
-
 class Results:
     '''Class to hold objects and methods for
     collection of results'''
@@ -248,10 +272,13 @@ class Results:
 
         # Independent vars for run
         self.data = {}
-        self.data['rounds'] = []
+        self.data['abstracts'] = []
+        self.data['batches'] = []
         self.data['replicate'] = []
         self.data['batch size'] = []
         self.data['workers'] = []
+        self.data['jobs per GPU'] = []
+        self.data['quantization'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
 
@@ -272,7 +299,7 @@ class Results:
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
 
-def batches(lst, n):
+def generate_batches(lst, n):
     '''Yield successive n-sized chunks from lst.'''
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
