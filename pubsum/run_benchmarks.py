@@ -52,9 +52,9 @@ model_quantization_benchmark_quantization_strategies = [
 
 # Batched inference benchmark
 batched_inference_benchmark_results_dir = f'{benchmark_dir}/batched_inference'
-batched_inference_benchmark_abstracts = 16
 batched_inference_benchmark_replicates = 5
-batched_inference_benchmark_batch_sizes = [1, 2, 4, 8, 16]
+batched_inference_benchmark_batches = 3
+batched_inference_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128]
 
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
@@ -67,11 +67,12 @@ parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available G
 
 # Data parallel batched summarization benchmark
 parallel_batched_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_batched_summarize'
-parallel_batched_summarize_benchmark_rounds = 3
 parallel_batched_summarize_benchmark_replicates = 5
-parallel_batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16]
-parallel_batched_summarize_GPU_jobs = [4, 8, 12, 16]
+parallel_batched_summarize_benchmark_batches = 3
+parallel_batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32]
+parallel_batched_summarize_GPU_jobs = [4, 8, 12, 16, 20, 24]
 parallel_batched_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
+parallel_batched_summarize_model_quantization = ['none', 'four bit']
 
 if __name__ == "__main__":
 
@@ -221,8 +222,8 @@ if __name__ == "__main__":
             conf.HOST,
             args.resume,
             batched_inference_benchmark_results_dir,
-            batched_inference_benchmark_abstracts,
             batched_inference_benchmark_replicates,
+            batched_inference_benchmark_batches,
             batched_inference_benchmark_batch_sizes
         )
 
@@ -245,7 +246,7 @@ if __name__ == "__main__":
             parallel_summarize_gpus,
         )
 
-    # Data parallel summarization benchmark
+    # Data parallel batched summarization benchmark
     if args.parallel_batched_summarize == 'True':
 
         parallel_batched.benchmark(
@@ -255,9 +256,10 @@ if __name__ == "__main__":
             conf.HOST,
             args.resume,
             parallel_batched_summarize_benchmark_results_dir,
-            parallel_batched_summarize_benchmark_rounds,
+            parallel_batched_summarize_benchmark_batches,
             parallel_batched_summarize_benchmark_replicates,
             parallel_batched_summarize_benchmark_batch_sizes,
             parallel_batched_summarize_GPU_jobs,
-            parallel_batched_summarize_gpus
+            parallel_batched_summarize_gpus,
+            parallel_batched_summarize_model_quantization
         )
