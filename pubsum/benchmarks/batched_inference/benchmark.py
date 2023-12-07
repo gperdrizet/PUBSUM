@@ -93,7 +93,7 @@ def benchmark(db_name, user, passwd, host, resume, results_dir, replicates, batc
                     # Collect data
                     results.data['abstracts'].append(num_abstracts)
                     results.data['replicate'].append(replicate)
-                    results.data['rounds'].append(rounds)
+                    results.data['batches'].append(batches)
                     results.data['batch size'].append(batch_size)
                     results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
                     results.data['max memory allocated (bytes)'].append(max_memory)
@@ -226,7 +226,7 @@ class Results:
         self.data = {}
         self.data['abstracts'] = []
         self.data['replicate'] = []
-        self.data['rounds'] = []
+        self.data['batches'] = []
         self.data['batch size'] = []
         self.data['summarization time (sec.)'] = []
         self.data['summarization rate (abstracts/sec.)'] = []
