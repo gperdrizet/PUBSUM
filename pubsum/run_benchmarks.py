@@ -1,6 +1,7 @@
 import argparse
 import os
 import config as conf
+import benchmarks.helper_functions as helper_funcs
 import benchmarks.load_summarize_insert.benchmark as lsi
 import benchmarks.sql_insert.benchmark as sql
 import benchmarks.huggingface_device_map.benchmark as device_map
@@ -226,12 +227,13 @@ if __name__ == "__main__":
     if args.batched_summarization == 'True':
 
         batched_summarization.benchmark(
-            resume = args.resume,
-            results_dir = f'{benchmark_dir}/batched_summarization',
-            replicates = 5,
-            batches = 3,
-            batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128],
-            quantization_strategies = ['none', 'four bit'],
+            helper_funcs=helper_funcs,
+            resume=args.resume,
+            results_dir=f'{benchmark_dir}/batched_summarization',
+            replicates=5,
+            batches=3,
+            batch_sizes=[1, 2, 4, 8, 16, 32, 64],
+            quantization_strategies=['none', 'four bit'],
             **SQL_SERVER_KWARGS
         )
 
