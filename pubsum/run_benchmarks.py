@@ -6,7 +6,7 @@ import benchmarks.load_summarize_insert.benchmark as lsi
 import benchmarks.sql_insert.benchmark as sql
 import benchmarks.huggingface_device_map.benchmark as device_map
 import benchmarks.model_quantization.benchmark as quantization
-import benchmarks.parallel_summarize.benchmark as parallel
+import benchmarks.parallel_summarization.benchmark as parallel
 import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarization.benchmark as parallel_batched
 
@@ -59,13 +59,6 @@ model_quantization_benchmark_quantization_strategies = [
     'nested four bit nf4 + BT',
 ]
 
-# Batched summarization benchmark (+/- model quantization)
-# batched_summarize_benchmark_results_dir = f'{benchmark_dir}/batched_summarization'
-# batched_summarize_benchmark_replicates = 5
-# batched_summarize_benchmark_batches = 3
-# batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128]
-# batched_summarize_quantization_strategies = ['none', 'four bit']
-
 # Data parallel summarization benchmark
 parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
 parallel_summarize_benchmark_abstracts = 120
@@ -74,15 +67,6 @@ parallel_summarize_device_map_strategies = ['GPU', 'CPU physical cores', 'CPU hy
 parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
 parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
 parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
-
-# Data parallel batched summarization benchmark (+/- model quantization)
-# parallel_batched_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_batched_summarize'
-# parallel_batched_summarize_benchmark_replicates = 5
-# parallel_batched_summarize_benchmark_batches = 3
-# parallel_batched_summarize_benchmark_batch_sizes = [1, 2, 4, 8, 16, 32]
-# parallel_batched_summarize_GPU_jobs = [4, 8, 12, 16, 20, 24]
-# parallel_batched_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
-# parallel_batched_summarize_quantization_strategies = ['none', 'four bit']
 
 if __name__ == "__main__":
 
@@ -241,18 +225,14 @@ if __name__ == "__main__":
     if args.parallel_summarization == 'True':
 
         parallel.benchmark(
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            parallel_summarize_benchmark_results_dir,
-            parallel_summarize_benchmark_abstracts,
-            parallel_summarize_benchmark_replicates,
-            parallel_summarize_device_map_strategies,
-            parallel_summarize_num_CPU_jobs,
-            parallel_summarize_num_GPU_jobs,
-            parallel_summarize_gpus,
+            resume=args.resume,
+            results_dir=f'{benchmark_dir}/parallel_summarization',
+            replicates=5,
+            batches=3,
+            devices=['GPU', 'CPU'],
+            num_jobs=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+            gpus=['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'],
+            **SQL_SERVER_KWARGS
         )
 
     # Data parallel batched summarization benchmark
