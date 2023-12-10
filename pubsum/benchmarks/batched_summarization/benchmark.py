@@ -144,13 +144,6 @@ def benchmark(
                 results.data['summarization time (sec.)'].append(dT)
                 results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
 
-                # Get rid of model and tokenizer from run, free up memory
-                del model
-                del tokenizer
-                gc.collect()
-                torch.cuda.empty_cache()
-                torch.cuda.reset_peak_memory_stats()
-
             # Catch out of memory errors
             except torch.cuda.OutOfMemoryError as oom:
                 print(f'\n {oom}\n')
