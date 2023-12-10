@@ -159,20 +159,18 @@ def benchmark(
         results.data['mean_insert_time'].append(mean_insert_time)
         results.data['mean_loading_time'].append(mean_loading_time)
 
-        # Save the results from this replicate
-        results.save_result()
-
         # Close our cursor for next replicate
         write_cursor.close()
 
-        # Get rid of model and tokenizer from run, free up memory
-        del model
-        del tokenizer
-        gc.collect()
-        torch.cuda.empty_cache()
+        # Save the results from this replicate
+        results.save_result()
 
         replicate += 1
         print(' Done.')
+
+    # Get rid of model and tokenizer from run, free up memory
+    gc.collect()
+    torch.cuda.empty_cache()
 
 def resume_run(
     helper_funcs,
