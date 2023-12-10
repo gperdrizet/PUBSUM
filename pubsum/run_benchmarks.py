@@ -58,8 +58,8 @@ if __name__ == "__main__":
             helper_funcs=helper_funcs,
             resume=args.resume,
             results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
-            num_abstracts=5,
-            replicates=5,
+            replicates=10,
+            num_abstracts=3,
             **conf.SQL_SERVER_KWARGS
         )
 
@@ -71,8 +71,8 @@ if __name__ == "__main__":
             resume=args.resume,
             master_file_list=conf.MASTER_FILE_LIST,
             results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
-            abstract_nums=[10000, 200000, 400000],
             replicates=5,
+            abstract_nums=[10000, 200000, 400000],
             insert_strategies=[
                 'execute_many', 
                 'execute_batch', 
