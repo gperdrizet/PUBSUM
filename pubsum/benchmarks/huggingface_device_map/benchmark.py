@@ -3,6 +3,7 @@ import gc
 import pandas as pd
 import psycopg2
 import time
+import torch
 import itertools
 from typing import List, Tuple
 import transformers
