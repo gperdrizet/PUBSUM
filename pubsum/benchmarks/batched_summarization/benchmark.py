@@ -1,5 +1,5 @@
-import os
 import gc
+from typing import List, Tuple
 import pandas as pd
 import time
 import torch
@@ -12,8 +12,8 @@ def benchmark(
     results_dir: str, 
     replicates: int, 
     batches: int, 
-    batch_sizes: [int], 
-    quantization_strategies: [str],
+    batch_sizes: List[int], 
+    quantization_strategies: List[str],
     db_name: str, 
     user: str, 
     passwd: str, 
@@ -23,7 +23,7 @@ def benchmark(
     print(f'\nRunning batched inference benchmark. Resume = {resume}.\n')
 
     # Set list of keys for the data we want to collect
-    independent_vars = [
+    collection_vars = [
         'abstracts',
         'replicate',
         'batches',
@@ -36,7 +36,7 @@ def benchmark(
     ]
 
     # Subset of independent vars which are sufficient to uniquely identify each run
-    unique_independent_vars = [
+    unique_collection_vars = [
         'quantization',
         'batch size', 
         'replicate'
@@ -46,8 +46,8 @@ def benchmark(
     completed_runs = helper_funcs.resume_run(
         resume=resume, 
         results_dir=results_dir,
-        independent_vars=independent_vars,
-        unique_independent_vars=unique_independent_vars
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
     )
 
     # Construct parameter sets
@@ -81,7 +81,7 @@ def benchmark(
             # Instantiate results object for this run
             results = helper_funcs.Results(
                 results_dir=results_dir,
-                independent_vars=independent_vars
+                collection_vars=collection_vars
             )
 
             # Collect data for run parameters
@@ -98,7 +98,13 @@ def benchmark(
                 model_memory_footprint = model.get_memory_footprint()
 
                 # Get enough rows to batch from abstracts table
-                rows = helper_funcs.get_rows(db_name, user, passwd, host, num_abstracts)
+                rows = helper_funcs.get_rows(
+                    db_name=db_name, 
+                    user=user, 
+                    passwd=passwd, 
+                    host=host, 
+                    num_abstracts=num_abstracts
+                )
 
                 # Start the batch loop
                 batch_count = 0
@@ -157,15 +163,24 @@ def benchmark(
 
             # Save the result
             results.save_result()
+
+            # Get rid of model and tokenizer from run, free up memory
+            del model
+            del tokenizer
+            gc.collect()
+            torch.cuda.empty_cache()
+
             print(' Done.')
 
     print()
 
     return True
 
-def start_llm(quantization: str) -> (
-    transformers.T5ForConditionalGeneration, transformers.T5TokenizerFast, transformers.GenerationConfig
-):
+def start_llm(quantization: str) -> Tuple[
+    transformers.T5ForConditionalGeneration, 
+    transformers.T5TokenizerFast, 
+    transformers.GenerationConfig
+]:
         
         # Place model on single GPU
         device_map = 'cuda:0'

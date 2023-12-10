@@ -1,4 +1,6 @@
 import os
+import gc
+from typing import List, Tuple
 import pandas as pd
 import psycopg2
 import time
@@ -6,17 +8,17 @@ import torch
 import itertools
 import multiprocessing as mp
 from .. import helper_functions as helper_funcs
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig
+import transformers
 
 def benchmark(
     resume: str,
     results_dir: str,
     replicates: int,
     batches: int,
-    batch_sizes: [int],
-    GPU_jobs: [int],
-    gpus: [str],
-    quantization_strategies: [str],
+    batch_sizes: List[int],
+    workers: List[int],
+    gpus: List[str],
+    quantization_strategies: List[str],
     db_name: str, 
     user: str, 
     passwd: str, 
@@ -26,20 +28,20 @@ def benchmark(
     print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.\n')
 
     # Set list of keys for the data we want to collect
-    independent_vars = [
+    collection_vars = [
         'abstracts',
         'batches',
         'replicate',
         'batch size',
         'workers',
-        'jobs per GPU',
+        'workers per GPU',
         'quantization',
         'summarization time (sec.)',
         'summarization rate (abstracts/sec.)'
     ]
 
-    # Subset of independent vars which are sufficient to uniquely identify each run
-    unique_independent_vars = [
+    # Subset of collection vars which are sufficient to uniquely identify each run
+    unique_collection_vars = [
         'quantization',
         'workers',
         'batch size',
@@ -50,8 +52,8 @@ def benchmark(
     completed_runs = helper_funcs.resume_run(
         resume=resume, 
         results_dir=results_dir,
-        independent_vars=independent_vars,
-        unique_independent_vars=unique_independent_vars
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
     )
 
     # Construct parameter sets
@@ -59,7 +61,7 @@ def benchmark(
 
     parameter_sets = itertools.product(
         quantization_strategies,
-        GPU_jobs,
+        workers,
         batch_sizes,
         replicate_numbers
     )
@@ -86,7 +88,7 @@ def benchmark(
             # Instantiate results object for this run
             results = helper_funcs.Results(
                 results_dir=results_dir,
-                independent_vars=independent_vars
+                collection_vars=collection_vars
             )
 
             # Collect data for run parameters
@@ -95,7 +97,7 @@ def benchmark(
             results.data['batches'].append(batches)
             results.data['batch size'].append(batch_size)
             results.data['workers'].append(workers)
-            results.data['jobs per GPU'].append(workers // 4)
+            results.data['workers per GPU'].append(workers // len(gpus))
             results.data['quantization'].append(quantization)
 
             # start a counter to pick GPUs for jobs
@@ -110,6 +112,7 @@ def benchmark(
             # Start timer
             start = time.time()
 
+            # Collector for returns from workers
             async_results = []
 
             # Loop on jobs for this run
@@ -120,7 +123,19 @@ def benchmark(
 
                 async_results.append(
                     pool.apply_async(start_job,
-                        args = (i, db_name, user, passwd, host, batches, batch_size, gpu_index, gpu, quantization)
+                        args = (
+                            i,
+                            db_name,
+                            user,
+                            passwd,
+                            host,
+                            num_abstracts,
+                            batches,
+                            batch_size,
+                            gpu_index,
+                            gpu,
+                            quantization
+                        )
                     )
                 )
 
@@ -141,7 +156,7 @@ def benchmark(
 
             # Get the results
             result = [async_result.get() for async_result in async_results]
-            print(f' Async results: {result}')
+            print(f'\n Workers succeeded: {result}')
 
             # Collect and save data, if we returned an OOM error, mark it in the results
             if False not in result:
@@ -154,8 +169,22 @@ def benchmark(
 
             results.save_result()
 
+    return True
 
-def start_job(i, db_name, user, passwd, host, batches, batch_size, gpu_index, gpu, quantization):
+
+def start_job(
+    i: int, 
+    db_name: str, 
+    user: str, 
+    passwd: str, 
+    host: str,
+    num_abstracts: int,
+    batches: int, 
+    batch_size: int, 
+    gpu_index: int, 
+    gpu: str, 
+    quantization: str
+) -> bool:
     
     print(f' Job {i}: starting on {gpu}.')
 
@@ -164,11 +193,18 @@ def start_job(i, db_name, user, passwd, host, batches, batch_size, gpu_index, gp
         torch.cuda.set_device(gpu_index)
     
         # Fire up the model for this run
-        model, tokenizer, gen_cfg = start_llm(gpu, quantization)
+        model, tokenizer, gen_cfg = start_llm(
+            gpu=gpu, 
+            quantization=quantization
+        )
 
-        # Get abstracts to summarize
-        num_abstracts = batch_size * batches
-        rows = helper_funcs.get_rows(db_name, user, passwd, host, num_abstracts)
+        rows = helper_funcs.get_rows(
+            db_name=db_name, 
+            user=user, 
+            passwd=passwd, 
+            host=host, 
+            num_abstracts=num_abstracts
+        )
 
         batch_count = 0
 
@@ -199,142 +235,55 @@ def start_job(i, db_name, user, passwd, host, batches, batch_size, gpu_index, gp
         print(f'{oom}')
         return False
 
+    except RuntimeError as rte:
+
+        print(f'{rte}')
+        return False
+
+    # Get rid of model and tokenizer from run, free up memory
+    del model
+    del tokenizer
+    gc.collect()
+    torch.cuda.empty_cache()
+
     print(f' Job {1}: done.')
 
     return True
 
-# def get_rows(db_name, user, passwd, host, num_abstracts):
-        
-#     # Open connection to PUBMED database on postgreSQL server, create connection
-#     connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
-
-#     # Start new reader cursor
-#     read_cursor = connection.cursor()
-
-#     # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
-#     # the article parsing script and not put empty abstracts into the SQL database. Let's do
-#     # that later, but this will work for now to get us were we want to go. Also, this is not
-#     # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
-#     # is irrelevant
-
-#     # Get 2x the number of rows we want
-#     read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
-
-#     # Collect non-empty rows until we have enough
-#     rows = []
-
-#     for row in read_cursor:
-
-#         abstract = row[1]
-
-#         if abstract != None:
-#             rows.append(row)
-
-#         if len(rows) == num_abstracts:
-#             break
-
-#     read_cursor.close()
-
-#     return rows
-
-
-def start_llm(gpu, quantization):
+def start_llm(
+    gpu: str, 
+    quantization: str
+) -> Tuple[
+    transformers.T5ForConditionalGeneration, 
+    transformers.T5TokenizerFast, 
+    transformers.GenerationConfig
+]:
 
     # Set quantization configuration
-    quantization_config = BitsAndBytesConfig(
+    quantization_config = transformers.BitsAndBytesConfig(
         load_in_4bit=False
     )
 
     if quantization == 'four bit':
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=False, 
+        quantization_config = transformers.BitsAndBytesConfig(
+            load_in_4bit=True, 
             bnb_4bit_compute_dtype=torch.float16
         )
 
     # Initialize the tokenizer
-    tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
+    tokenizer = transformers.AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
 
     # Initialize model with selected device map
-    model = AutoModelForSeq2SeqLM.from_pretrained(
+    model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
         'haining/scientific_abstract_simplification', 
         device_map = gpu,
         quantization_config=quantization_config
     )
     
     # Load generation config from model and set some parameters as desired
-    gen_cfg = GenerationConfig.from_model_config(model.config)
+    gen_cfg = transformers.GenerationConfig.from_model_config(model.config)
     gen_cfg.max_length = 256
     gen_cfg.top_p = 0.9
     gen_cfg.do_sample = True
 
     return model, tokenizer, gen_cfg
-
-# def summarize(abstracts, model, tokenizer, gen_cfg):
-
-#     # Prepend the prompt to this abstract and encode
-#     inputs = ['summarize, simplify, and contextualize: ' + abstract for abstract in abstracts]
-        
-#     encoding = tokenizer(
-#         inputs, 
-#         max_length = 672, 
-#         padding = 'max_length', 
-#         truncation = True, 
-#         return_tensors = 'pt'
-#     )
-
-#     encoding = encoding.to('cuda')
-    
-#     # Generate summary
-#     decoded_ids = model.generate(
-#         input_ids = encoding['input_ids'],
-#         attention_mask = encoding['attention_mask'], 
-#         generation_config = gen_cfg
-#     )
-    
-#     # Decode summary
-#     summaries = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
-
-#     return summaries
-
-# class Results:
-#     '''Class to hold objects and methods for
-#     collection of results'''
-
-#     def __init__(self, results_dir):
-
-#         # Output file for results
-#         self.output_file = f'{results_dir}/results.csv'
-
-#         # Independent vars for run
-#         self.data = {}
-#         self.data['abstracts'] = []
-#         self.data['batches'] = []
-#         self.data['replicate'] = []
-#         self.data['batch size'] = []
-#         self.data['workers'] = []
-#         self.data['jobs per GPU'] = []
-#         self.data['quantization'] = []
-#         self.data['summarization time (sec.)'] = []
-#         self.data['summarization rate (abstracts/sec.)'] = []
-
-#     def save_result(self, overwrite = False):
-
-#         # Make dataframe of new results
-#         results_df = pd.DataFrame(self.data)
-
-#         # Read existing results if any and concatenate new results if desired
-#         if overwrite == False:
-#             if os.path.exists(self.output_file):
-#                 old_results_df = pd.read_csv(self.output_file)
-#                 results_df = pd.concat([old_results_df, results_df])
-
-#         else:
-#             print('Clearing any old results.')
-
-#         # Save results for run to csv
-#         results_df.to_csv(self.output_file, index = False)
-
-# def generate_batches(lst, n):
-#     '''Yield successive n-sized chunks from lst.'''
-#     for i in range(0, len(lst), n):
-#         yield lst[i:i + n]

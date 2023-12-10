@@ -2,12 +2,13 @@ import os
 import psycopg2
 import transformers
 import pandas as pd
+from typing import List
 
 def resume_run(
     resume: str, 
     results_dir: str, 
-    independent_vars: [str], 
-    unique_independent_vars: [str]
+    collection_vars: List[str], 
+    unique_collection_vars: List[str]
 ) -> list:
 
     '''Reads old data and collects the completed conditions 
@@ -25,8 +26,8 @@ def resume_run(
             # columns in the old results dataframe
             old_results = []
 
-            for unique_independent_var in unique_independent_vars:
-                old_results.append(old_results_df[unique_independent_var].to_list())
+            for unique_collection_var in unique_collection_vars:
+                old_results.append(old_results_df[unique_collection_var].to_list())
 
             # Zip the lists of data into tuples
             completed_runs = list(zip(*old_results))
@@ -44,7 +45,7 @@ def resume_run(
         # Initialize and save empty results object
         results = Results(
             results_dir=results_dir,
-            independent_vars=independent_vars
+            collection_vars=collection_vars
         )
 
         results.save_result(overwrite = True)
@@ -60,7 +61,7 @@ def get_rows(
     passwd: str, 
     host: str, 
     num_abstracts: int
-) -> [[str]]:
+) -> List[List[str]]:
         
     # Open connection to PUBMED database on postgreSQL server, create connection
     connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
@@ -95,12 +96,12 @@ def get_rows(
     return rows
 
 def summarize(
-    abstracts: [str], 
+    abstracts: List[str], 
     model: transformers.T5ForConditionalGeneration, 
     tokenizer: transformers.T5TokenizerFast, 
     gen_cfg: transformers.GenerationConfig,
     use_GPU: bool = False
-) -> [str]:
+) -> List[str]:
         
     # Prepend the prompt to this abstract and encode
     inputs = ['summarize, simplify, and contextualize: ' + abstract for abstract in abstracts]
@@ -133,7 +134,7 @@ class Results:
     '''Class to hold objects and methods for
     collection of results'''
 
-    def __init__(self, results_dir: str, independent_vars: [str]):
+    def __init__(self, results_dir: str, collection_vars: List[str]):
 
         # Output file for results
         self.output_file = f'{results_dir}/results.csv'
@@ -141,9 +142,9 @@ class Results:
         # Create dict for data
         self.data = {}
 
-        # Empty list to data dict for each independent var
-        for independent_var in independent_vars:
-            self.data[independent_var] = []
+        # Empty list to data dict for each collection var
+        for collection_var in collection_vars:
+            self.data[collection_var] = []
 
     def save_result(self, overwrite: bool = False) -> None:
 

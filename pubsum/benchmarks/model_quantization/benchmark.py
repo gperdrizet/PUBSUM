@@ -4,147 +4,155 @@ import pandas as pd
 import psycopg2
 import time
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig, BitsAndBytesConfig, GPTQConfig
+import itertools
+from typing import List, Tuple
+import transformers
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, quantization_strategies):
+# Silence parallelism warning
+os.environ['TOKENIZERS_PARALLELISM'] = 'true'
+
+def benchmark(
+    helper_funcs,
+    resume: bool,
+    results_dir: str,
+    replicates: int,
+    num_abstracts: int,
+    quantization_strategies: List[str], 
+    db_name: str, 
+    user: str, 
+    passwd: str, 
+    host: str
+):
     
     print(f'\nRunning model quantization benchmark. Resume = {resume}.\n')
 
-    # If we are resuming a prior run, read old data and collect the
-    # completed conditions as a list of lists so we can skip them
-    if resume == 'True':
+    # Set list of keys for the data we want to collect
+    collection_vars = [
+        'replicate',
+        'abstracts',
+        'quantization strategy',
+        'summarization time (sec.)',
+        'summarization rate (abstracts/sec.)',
+        'model GPU memory footprint (bytes)',
+        'max memory allocated (bytes)'
+    ]
 
-        # Read existing results if any
-        if os.path.exists(f'{results_dir}/results.csv'):
+    # Subset of independent vars which are sufficient to uniquely identify each run
+    unique_collection_vars = [
+        'quantization strategy',
+        'replicate'
+    ]
 
-            old_results_df = pd.read_csv(f'{results_dir}/results.csv')
+    # Handel resume request by reading or emptying old data, as appropriate
+    completed_runs = helper_funcs.resume_run(
+        resume=resume, 
+        results_dir=results_dir,
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
+    )
 
-            completed_runs = list(zip(
-                old_results_df['abstract'].to_list(),
-                old_results_df['quantization strategy'].to_list()
-            ))
+    # Construct parameter sets
+    replicate_numbers = list(range(1, replicates + 1))
 
-            print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
+    parameter_sets = itertools.product(
+        quantization_strategies,
+        replicate_numbers
+    )
 
-        else:
-            print(f'No data to resume from, starting from scratch.')
-            completed_runs = []
+    # Loop on parameter sets
+    for parameter_set in parameter_sets:
 
-    # If we are not resuming an old run, empty datafile if it exists
-    else:
-        # Initialize and save empty results object
-        results = Results(results_dir)
-        results.save_result(overwrite = True)
+        # Check if we have already completed this parameter set
+        if parameter_set not in completed_runs:
 
-        # Set completed runs to empty list
-        completed_runs = []
+            # Unpack parameters from set
+            quantization_strategy, replicate = parameter_set
 
-    for quantization_strategy in quantization_strategies:
+            # Calculate total abstracts needed for job
+            num_abstracts = replicates
 
-        print(f'Starting benchmark run on {num_abstracts} abstracts with model strategy {quantization_strategy}.')
+            print(f'\nModel quantization benchmark:\n')
+            print(f' Replicate: {replicate} of {replicates}')
+            print(f' Model quantization: {quantization_strategy}')
 
-        # Fire up the model for this run
-        model, tokenizer, gen_cfg = start_llm(quantization_strategy)
-        model_memory_footprint = model.get_memory_footprint()
+            # Instantiate results object for this run
+            results = helper_funcs.Results(
+                results_dir=results_dir,
+                collection_vars=collection_vars
+            )
 
-        # Get rows from abstracts table
-        rows = get_rows(db_name, user, passwd, host, num_abstracts)
+            # Fire up the model for this run
+            model, tokenizer, gen_cfg = start_llm(quantization_strategy)
+            model_memory_footprint = model.get_memory_footprint()
 
-        # Loop on rows
-        row_count = 1
+            # Get rows from abstracts table
+            rows = helper_funcs.get_rows(
+                db_name=db_name, 
+                user=user, 
+                passwd=passwd, 
+                host=host, 
+                num_abstracts=num_abstracts
+            )
 
-        for row in rows:
+            # Do and time the summary
+            summarization_start = time.time()
 
-            run_tuple = (row_count, quantization_strategy)
+            # Loop on rows
+            row_count = 0
 
-            if run_tuple not in completed_runs:
+            for row in rows:
 
-                # Instantiate results object for this run
-                results = Results(results_dir)
+                row_count += 1
 
-                # Get PMCID and abstract text for this row
-                pmcid = row[0]
+                print(f' Summarizing abstract: {row_count} of {num_abstracts}')
+
+                # Get abstract text for this row
                 abstract = row[1]
 
-                # Make sure this abstract actually has content to be summarized
-                if abstract != None:
+                summary = helper_funcs.summarize(
+                    abstracts=[abstract], 
+                    model=model, 
+                    tokenizer=tokenizer, 
+                    gen_cfg=gen_cfg, 
+                    use_GPU=True
+                )
 
-                    # Collect run parameters to results
-                    results.data['abstract'].append(row_count)
-                    results.data['quantization strategy'].append(quantization_strategy)
-                    results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
-                    print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
+            dT = time.time() - summarization_start
 
-                    # Do and time the summary
-                    summarization_start = time.time()
-                    summary = summarize(abstract, model, tokenizer, gen_cfg, quantization_strategy)
-                    dT = time.time() - summarization_start
+            # Get max memory used and reset
+            max_memory = torch.cuda.max_memory_allocated()
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
 
-                    # Get max memory used and reset
-                    max_memory = torch.cuda.max_memory_allocated()
-                    torch.cuda.empty_cache()
-                    torch.cuda.reset_peak_memory_stats()
+            # Collect data
+            results.data['replicate'].append(replicate)
+            results.data['abstracts'].append(num_abstracts)
+            results.data['quantization strategy'].append(quantization_strategy)
+            results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
+            results.data['max memory allocated (bytes)'].append(max_memory)
+            results.data['summarization time (sec.)'].append(dT)
+            results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
 
-                    # Collect data
-                    results.data['max memory allocated (bytes)'].append(max_memory)
-                    results.data['summarization time (sec.)'].append(dT)
-                    results.data['summarization rate (abstracts/sec.)'].append(1/dT)
+            # Get rid of model and tokenizer from run, free up memory
+            del model
+            del tokenizer
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
 
-                    # Save the result
-                    results.save_result()
-
-                else:
-                    print(f'Empty abstract.')
-
-            row_count += 1
-
-        # Get rid of model and tokenizer from run, free up memory
-        del model
-        del tokenizer
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-
-        print('Done.\n')
+            # Save the result
+            results.save_result()
+            print(' Done.')
 
     print()
 
-def get_rows(db_name, user, passwd, host, num_abstracts):
-        
-    # Open connection to PUBMED database on postgreSQL server, create connection
-    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
-
-    # Start new reader cursor
-    read_cursor = connection.cursor()
-
-    # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
-    # the article parsing script and not put empty abstracts into the SQL database. Let's do
-    # that later, but this will work for now to get us were we want to go. Also, this is not
-    # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
-    # is irrelevant
-
-    # Get 2x the number of rows we want
-    read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
-
-    # Collect non-empty rows until we have enough
-    rows = []
-
-    for row in read_cursor:
-
-        abstract = row[1]
-
-        if abstract != None:
-            rows.append(row)
-
-        if len(rows) == num_abstracts:
-            break
-        
-    read_cursor.close()
-
-    return rows
 
 
-def start_llm(quantization_strategy):
+def start_llm(quantization_strategy: str) -> Tuple[
+    transformers.T5ForConditionalGeneration, 
+    transformers.T5TokenizerFast, 
+    transformers.GenerationConfig
+]:
         
         # Place model on single GPU
         device_map = 'cuda:0'
@@ -153,10 +161,12 @@ def start_llm(quantization_strategy):
         if 'none' in quantization_strategy:
 
             # Initialize the tokenizer
-            tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
+            tokenizer = transformers.AutoTokenizer.from_pretrained(
+                "haining/scientific_abstract_simplification"
+            )
 
             # Initialize model
-            model = AutoModelForSeq2SeqLM.from_pretrained(
+            model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
                 "haining/scientific_abstract_simplification", 
                 device_map=device_map
             )
@@ -164,21 +174,21 @@ def start_llm(quantization_strategy):
         elif 'none' not in quantization_strategy:
             if 'eight bit' in quantization_strategy:
 
-                quantization_config = BitsAndBytesConfig(
+                quantization_config = transformers.BitsAndBytesConfig(
                     load_in_8bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
             elif 'four bit' in quantization_strategy and 'nf4' not in quantization_strategy and 'nested' not in quantization_strategy:
 
-                quantization_config = BitsAndBytesConfig(
+                quantization_config = transformers.BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_compute_dtype=torch.float16
                 )
 
             elif 'four bit nf4' in quantization_strategy and 'nested' not in quantization_strategy:
 
-                quantization_config = BitsAndBytesConfig(
+                quantization_config = transformers.BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_quant_type='nf4',
                     bnb_4bit_compute_dtype=torch.float16
@@ -186,7 +196,7 @@ def start_llm(quantization_strategy):
 
             elif 'nested four bit' in quantization_strategy and 'nf4' not in quantization_strategy:
 
-                quantization_config = BitsAndBytesConfig(
+                quantization_config = transformers.BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_use_double_quant=True,
                     bnb_4bit_compute_dtype=torch.float16
@@ -194,7 +204,7 @@ def start_llm(quantization_strategy):
 
             elif 'nested four bit nf4' in quantization_strategy:
 
-                quantization_config = BitsAndBytesConfig(
+                quantization_config = transformers.BitsAndBytesConfig(
                     load_in_4bit=True, 
                     bnb_4bit_quant_type='nf4',
                     bnb_4bit_use_double_quant=True,
@@ -202,10 +212,12 @@ def start_llm(quantization_strategy):
                 )
 
             # Initialize the tokenizer
-            tokenizer = AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
+            tokenizer = transformers.AutoTokenizer.from_pretrained(
+                'haining/scientific_abstract_simplification'
+            )
 
             # Initialize model
-            model = AutoModelForSeq2SeqLM.from_pretrained(
+            model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
                 'haining/scientific_abstract_simplification', 
                 device_map=device_map,
                 quantization_config=quantization_config
@@ -216,72 +228,9 @@ def start_llm(quantization_strategy):
             model.to_bettertransformer()
         
         # Load generation config from model and set some parameters as desired
-        gen_cfg = GenerationConfig.from_model_config(model.config)
+        gen_cfg = transformers.GenerationConfig.from_model_config(model.config)
         gen_cfg.max_length = 256
         gen_cfg.top_p = 0.9
         gen_cfg.do_sample = True
 
         return model, tokenizer, gen_cfg
-
-def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
-        
-    # Prepend the prompt to this abstract and encode
-    encoding = tokenizer(
-        'summarize, simplify, and contextualize: ' + abstract, 
-        max_length = 672, 
-        padding = 'max_length', 
-        truncation = True, 
-        return_tensors = 'pt'
-    )
-
-    # Move to GPU if appropriate
-    if device_map_strategy != 'CPU only':
-        encoding = encoding.to('cuda')
-    
-    # Generate summary
-    decoded_ids = model.generate(
-        input_ids = encoding['input_ids'],
-        attention_mask = encoding['attention_mask'], 
-        generation_config = gen_cfg
-    )
-    
-    # Decode summary
-    summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
-
-    return summary
-
-class Results:
-    '''Class to hold objects and methods for
-    collection of results'''
-
-    def __init__(self, results_dir):
-
-        # Output file for results
-        self.output_file = f'{results_dir}/results.csv'
-
-        # Independent vars for run
-        self.data = {}
-        self.data['abstract'] = []
-        self.data['quantization strategy'] = []
-        self.data['summarization time (sec.)'] = []
-        self.data['summarization rate (abstracts/sec.)'] = []
-        self.data['model GPU memory footprint (bytes)'] = []
-        self.data['max memory allocated (bytes)'] = []
-
-    def save_result(self, overwrite = False):
-
-        # Make dataframe of new results
-        results_df = pd.DataFrame(self.data)
-
-        if overwrite == False:
-
-            # Read existing results if any and concatenate new results
-            if os.path.exists(self.output_file):
-                old_results_df = pd.read_csv(self.output_file)
-                results_df = pd.concat([old_results_df, results_df])
-
-        else:
-            print('Clearing any old results.')
-
-        # Save results for run to csv
-        results_df.to_csv(self.output_file, index = False)

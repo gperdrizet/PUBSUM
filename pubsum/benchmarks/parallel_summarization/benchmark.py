@@ -1,10 +1,12 @@
 import os
+import gc
 import pandas as pd
 import psycopg2
 import time
 import torch
 import itertools
 import multiprocessing as mp
+from typing import Tuple, List
 from .. import helper_functions as helper_funcs
 import transformers
 
@@ -13,19 +15,19 @@ def benchmark(
     results_dir: str,
     replicates: int,
     batches: int,
-    devices: [str],
-    num_jobs: [int],
-    gpus: [str],
-    db_name: [str], 
-    user: [str], 
-    passwd: [str], 
-    host: [str]
+    devices: List[str],
+    workers: List[int],
+    gpus: List[str],
+    db_name: List[str], 
+    user: List[str], 
+    passwd: List[str], 
+    host: List[str]
 ) -> bool:
     
     print(f'\nRunning data parallel summarization benchmark. Resume = {resume}.\n')
 
     # Set list of keys for the data we want to collect
-    independent_vars = [
+    collection_vars = [
         'abstracts',
         'abstracts per worker',
         'replicate',
@@ -36,8 +38,8 @@ def benchmark(
         'summarization rate (abstracts/sec.)'
     ]
 
-    # Subset of independent vars which are sufficient to uniquely identify each run
-    unique_independent_vars = [
+    # Subset of collection vars which are sufficient to uniquely identify each run
+    unique_collection_vars = [
         'device',
         'workers',
         'replicate'
@@ -47,8 +49,8 @@ def benchmark(
     completed_runs = helper_funcs.resume_run(
         resume=resume, 
         results_dir=results_dir,
-        independent_vars=independent_vars,
-        unique_independent_vars=unique_independent_vars
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
     )
 
     # Construct parameter sets
@@ -56,7 +58,7 @@ def benchmark(
 
     parameter_sets = itertools.product(
         devices,
-        num_jobs,
+        workers,
         replicate_numbers
     )
 
@@ -82,7 +84,7 @@ def benchmark(
             # Instantiate results object for this run
             results = helper_funcs.Results(
                 results_dir=results_dir,
-                independent_vars=independent_vars
+                collection_vars=collection_vars
             )
 
             # Collect data for run parameters
@@ -101,7 +103,7 @@ def benchmark(
             # GPU access to all CPU physical cores
             if device == 'GPU':
                 gpu_index = 0
-                torch.set_num_threads(10)
+                torch.set_num_threads(mp.cpu_count())
 
             # If this run is not using GPU(s), pass none for GPU related parameters
             else:
@@ -129,7 +131,18 @@ def benchmark(
 
                 async_results.append(
                     pool.apply_async(start_job,
-                        args = (i, db_name, user, passwd, host, batches, num_abstracts, device, gpu_index, gpu)
+                        args = (
+                            i, 
+                            db_name, 
+                            user, 
+                            passwd, 
+                            host, 
+                            batches, 
+                            num_abstracts, 
+                            device, 
+                            gpu_index, 
+                            gpu
+                        )
                     )
                 )
 
@@ -240,16 +253,22 @@ def start_job(
         print(f'{rte}')
         return False
 
+    # Get rid of model and tokenizer from run, free up memory
+    del model
+    del tokenizer
+    gc.collect()
+    torch.cuda.empty_cache()
+
     print(f' Job {1}: done.')
 
     return True
 
 
-def start_llm(gpu: str) -> (
+def start_llm(gpu: str) -> Tuple[
     transformers.T5ForConditionalGeneration, 
     transformers.T5TokenizerFast, 
     transformers.GenerationConfig
-):
+]:
         
         # Set device_map parameter for Huggingface
         if gpu == None:
@@ -275,71 +294,71 @@ def start_llm(gpu: str) -> (
 
         return model, tokenizer, gen_cfg
 
-def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
+# def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
         
-    # Prepend the prompt to this abstract and encode
-    encoding = tokenizer(
-        'summarize, simplify, and contextualize: ' + abstract, 
-        max_length = 672, 
-        padding = 'max_length', 
-        truncation = True, 
-        return_tensors = 'pt'
-    )
+#     # Prepend the prompt to this abstract and encode
+#     encoding = tokenizer(
+#         'summarize, simplify, and contextualize: ' + abstract, 
+#         max_length = 672, 
+#         padding = 'max_length', 
+#         truncation = True, 
+#         return_tensors = 'pt'
+#     )
 
-    # Move to GPU if appropriate
-    if 'CPU' not in device_map_strategy.split(' '):
-        encoding = encoding.to('cuda')
+#     # Move to GPU if appropriate
+#     if 'CPU' not in device_map_strategy.split(' '):
+#         encoding = encoding.to('cuda')
     
-    # Generate summary
-    decoded_ids = model.generate(
-        input_ids = encoding['input_ids'],
-        attention_mask = encoding['attention_mask'], 
-        generation_config = gen_cfg
-    )
+#     # Generate summary
+#     decoded_ids = model.generate(
+#         input_ids = encoding['input_ids'],
+#         attention_mask = encoding['attention_mask'], 
+#         generation_config = gen_cfg
+#     )
     
-    # Decode summary
-    summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
+#     # Decode summary
+#     summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
 
-    return summary
+#     return summary
 
-def collect_result(result):
-    # Need a dummy return here since we don't have good logging setup
-    # this ensures that anything that a worker process sends to STDOUT
-    # or STDERR actually shows up in the terminal
-    return True
+# def collect_result(result):
+#     # Need a dummy return here since we don't have good logging setup
+#     # this ensures that anything that a worker process sends to STDOUT
+#     # or STDERR actually shows up in the terminal
+#     return True
 
-class Results:
-    '''Class to hold objects and methods for
-    collection of results'''
+# class Results:
+#     '''Class to hold objects and methods for
+#     collection of results'''
 
-    def __init__(self, results_dir):
+#     def __init__(self, results_dir):
 
-        # Output file for results
-        self.output_file = f'{results_dir}/results.csv'
+#         # Output file for results
+#         self.output_file = f'{results_dir}/results.csv'
 
-        # Independent vars for run
-        self.data = {}
-        self.data['replicate'] = []
-        self.data['abstracts'] = []
-        self.data['abstracts per worker'] = []
-        self.data['workers'] = []
-        self.data['device map strategy'] = []
-        self.data['summarization time (sec.)'] = []
-        self.data['summarization rate (abstracts/sec.)'] = []
+#         # Independent vars for run
+#         self.data = {}
+#         self.data['replicate'] = []
+#         self.data['abstracts'] = []
+#         self.data['abstracts per worker'] = []
+#         self.data['workers'] = []
+#         self.data['device map strategy'] = []
+#         self.data['summarization time (sec.)'] = []
+#         self.data['summarization rate (abstracts/sec.)'] = []
 
-    def save_result(self, overwrite = False):
+#     def save_result(self, overwrite = False):
 
-        # Make dataframe of new results
-        results_df = pd.DataFrame(self.data)
+#         # Make dataframe of new results
+#         results_df = pd.DataFrame(self.data)
 
-        # Read existing results if any and concatenate new results if desired
-        if overwrite == False:
-            if os.path.exists(self.output_file):
-                old_results_df = pd.read_csv(self.output_file)
-                results_df = pd.concat([old_results_df, results_df])
+#         # Read existing results if any and concatenate new results if desired
+#         if overwrite == False:
+#             if os.path.exists(self.output_file):
+#                 old_results_df = pd.read_csv(self.output_file)
+#                 results_df = pd.concat([old_results_df, results_df])
 
-        else:
-            print('Clearing any old results.')
+#         else:
+#             print('Clearing any old results.')
 
-        # Save results for run to csv
-        results_df.to_csv(self.output_file, index = False)
+#         # Save results for run to csv
+#         results_df.to_csv(self.output_file, index = False)

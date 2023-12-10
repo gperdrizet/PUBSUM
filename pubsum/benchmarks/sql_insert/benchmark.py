@@ -1,51 +1,52 @@
-'''Benchmarking script to try out various methods
-for inserting large numbers of rows into postgreSQL
-tables via psycopg2
-'''
-
 import os
+import gc
 import time
 import psycopg2
 import psycopg2.extras as extras
+import itertools
 import pandas as pd
 from io import StringIO
+from typing import List
 
-def benchmark(master_file_list, db_name, user, passwd, host, resume, 
-              results_dir, num_abstracts, insert_strategies, num_replicates):
+def benchmark(
+    helper_funcs,
+    resume: bool, 
+    master_file_list: str,
+    results_dir: str,
+    abstract_nums: int,
+    insert_strategies: List[str],
+    replicates: int, 
+    db_name: str, 
+    user: str, 
+    passwd: str, 
+    host: str, 
+):
 
-    print(f'\nRunning SQL insert benchmark. Resume = {resume}\n\n')
+    print(f'\nRunning SQL insert benchmark. Resume = {resume}.\n')
 
-    # If we are resuming a prior run, read old data and collect the
-    # completed conditions as a list of lists so we can skip them
-    if resume == 'True':
+    # Set list of keys for the data we want to collect
+    collection_vars = [
+        'abstracts',
+        'insert time (sec.)',
+        'insert rate (abstracts/sec.)',
+        'insert strategy',
+        'replicate'
+    ]
 
-        # Read existing results if any
-        if os.path.exists(f'{results_dir}/results.csv'):
+    # Subset of independent vars which are sufficient to uniquely identify each run
+    unique_collection_vars = [
+        'insert strategy',
+        'abstracts',
+        'replicate'
+    ]
 
-            old_results_df = pd.read_csv(f'{results_dir}/results.csv')
-
-            completed_runs = list(zip(
-                old_results_df['insert strategy'].to_list(),
-                old_results_df['abstracts'].to_list(),
-                old_results_df['replicate'].to_list()
-            ))
-
-            print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
-
-        else:
-            print(f'No data to resume from, starting from scratch.')
-            completed_runs = []
-
-
-    # If we are not resuming an old run, empty datafile if it exists
-    else:
-        # Initialize and save empty results object
-        results = Results(results_dir)
-        results.save_result(overwrite = True)
-
-        # Set completed runs to empty list
-        completed_runs = []
-
+    # Handel resume request by reading or emptying old data, as appropriate
+    completed_runs = helper_funcs.resume_run(
+        resume=resume, 
+        results_dir=results_dir,
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
+    )
 
     # Read file list into pandas dataframe
     print('Reading file list into pandas df.')
@@ -56,55 +57,66 @@ def benchmark(master_file_list, db_name, user, passwd, host, resume,
     article_paths_df = pd.DataFrame(file_list_df, columns=['AccessionID', 'Article File'])
 
     # Connect to postgresql server
-    print('Connecting to SQL server.\n')
+    print('Connecting to SQL server.')
     connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
 
-    # Loop on the insertion strategies
-    for insert_strategy in insert_strategies:
+    # Construct parameter sets
+    replicate_numbers = list(range(1, replicates + 1))
 
-        # Loop on the abstract sample sizes
-        for n in num_abstracts:
+    parameter_sets = itertools.product(
+        insert_strategies,
+        abstract_nums,
+        replicate_numbers
+    )
 
-            print(f'Starting benchmark run on {n} abstracts with insertion strategy {insert_strategy}.')
+    # Loop on parameter sets
+    for parameter_set in parameter_sets:
 
-            # Do replicates for science
-            i = 1
-            while i <= num_replicates:
+        # Check if we have already completed this parameter set
+        if parameter_set not in completed_runs:
 
-                run_tuple = (insert_strategy, n, i)
+            # Unpack parameters from set
+            insert_strategy, num_abstracts, replicate = parameter_set
 
-                if run_tuple not in completed_runs:
+            print(f'\nSQL insert strategy benchmark:\n')
+            print(f' Replicate: {replicate} of {replicates}')
+            print(f' Insert strategy {insert_strategy}')
+            print(f' Abstracts: {num_abstracts}')
 
-                    print(f'Inserting replicate {i}')
+            # Instantiate results object for this run
+            results = helper_funcs.Results(
+                results_dir=results_dir,
+                collection_vars=collection_vars
+            )
 
-                    # Instantiate results object for this run
-                    results = Results(results_dir)
+            # Initialize a fresh write cursor and target table
+            write_cursor = make_target_table_write_cursor(connection=connection)
 
-                    # Initialize a fresh write cursor and target table
-                    write_cursor = make_target_table_write_cursor(connection)
+            # Randomly pick n rows of abstracts
+            rows = article_paths_df.sample(num_abstracts)
 
-                    # Randomly pick n rows of abstracts
-                    rows = article_paths_df.sample(n)
+            # Do and time the insert
+            insert_time = insert(
+                rows=rows, 
+                insert_strategy=insert_strategy, 
+                write_cursor=write_cursor, 
+                connection=connection
+            )
 
-                    # Do and time the insert
-                    insert_time = insert(rows, insert_strategy, write_cursor, connection)
+            # Collect result
+            results.data['abstracts'].append(num_abstracts)
+            results.data['insert time (sec.)'].append(insert_time)
+            results.data['insert rate (abstracts/sec.)'].append(num_abstracts/insert_time)
+            results.data['insert strategy'].append(insert_strategy)
+            results.data['replicate'].append(replicate)
 
-                    # Collect result
-                    results.data['abstracts'].append(n)
-                    results.data['insert time (sec.)'].append(insert_time)
-                    results.data['insert rate (abstracts/sec.)'].append(n/insert_time)
-                    results.data['insert strategy'].append(insert_strategy)
-                    results.data['replicate'].append(i)
+            # Save result
+            results.save_result()
 
-                    # Save result
-                    results.save_result()
+            # Clean up
+            write_cursor.close()
 
-                    # Clean up
-                    write_cursor.close()
-
-                i += 1
-
-            print('Done.\n')
+            print(' Done.')
 
     # Clean up
     write_cursor = connection.cursor()
@@ -119,7 +131,9 @@ def benchmark(master_file_list, db_name, user, passwd, host, resume,
     connection.close()
 
 
-def make_target_table_write_cursor(connection):
+def make_target_table_write_cursor(
+    connection: psycopg2.extensions.connection
+) -> psycopg2.extensions.cursor:
 
     write_cursor = connection.cursor()
     
@@ -141,7 +155,12 @@ def make_target_table_write_cursor(connection):
 
     return write_cursor
 
-def insert(rows, insert_strategy, write_cursor, connection):
+def insert(
+    rows: int, 
+    insert_strategy: str, 
+    write_cursor: psycopg2.extensions.cursor, 
+    connection: psycopg2.extensions.cursor
+) -> float:
 
     if insert_strategy == 'execute_many':
 
@@ -204,39 +223,3 @@ def insert(rows, insert_strategy, write_cursor, connection):
         connection.commit()
         
     return time.time() - start_time
-
-
-class Results:
-    '''Class to hold objects and methods for
-    collection of results'''
-
-    def __init__(self, results_dir):
-
-        # Output file for results
-        self.output_file = f'{results_dir}/results.csv'
-
-        # Independent vars for run
-        self.data = {}
-        self.data['abstracts'] = []
-        self.data['insert time (sec.)'] = []
-        self.data['insert rate (abstracts/sec.)'] = []
-        self.data['insert strategy'] = []
-        self.data['replicate'] = []
-
-    def save_result(self, overwrite = False):
-
-        # Make dataframe of new results
-        results_df = pd.DataFrame(self.data)
-
-        if overwrite == False:
-
-            # Read existing results if any and concatenate new results
-            if os.path.exists(self.output_file):
-                old_results_df = pd.read_csv(self.output_file)
-                results_df = pd.concat([old_results_df, results_df])
-
-        else:
-            print('Clearing any old results.')
-
-        # Save results for run to csv
-        results_df.to_csv(self.output_file, index = False)

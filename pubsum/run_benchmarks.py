@@ -1,8 +1,7 @@
 import argparse
-import os
 import config as conf
 import benchmarks.helper_functions as helper_funcs
-import benchmarks.load_summarize_insert.benchmark as lsi
+import benchmarks.baseline_execute_time.benchmark as baseline_execute
 import benchmarks.sql_insert.benchmark as sql
 import benchmarks.huggingface_device_map.benchmark as device_map
 import benchmarks.model_quantization.benchmark as quantization
@@ -10,69 +9,23 @@ import benchmarks.parallel_summarization.benchmark as parallel
 import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarization.benchmark as parallel_batched
 
-###########################
-# Benchmarking parameters #
-###########################
-
-# SQL server info
-SQL_SERVER_KWARGS = {
-    'db_name': conf.DB_NAME,
-    'user': conf.USER,
-    'passwd': conf.PASSWD,
-    'host': conf.HOST
-}
-
-# Benchmarks parent dir
-benchmark_dir = f'{conf.PROJECT_ROOT_PATH}/benchmarks/'
-
-# Initial MVP load, summarize, insert execution time benchmark
-summarize_benchmark_results_dir = f'{benchmark_dir}/load_summarize_insert'
-summarize_benchmark_abstracts = 5
-summarize_benchmark_replicates = 30
-
-# PostgreSQL/psycopg2 insert benchmark for table creation
-insert_benchmark_results_dir = f'{benchmark_dir}/sql_insert'
-insert_benchmark_abstracts = [10000, 200000, 400000]
-insert_benchmark_replicates = 10
-insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'stringIO']
-
-# Huggingface device map benchmark for abstract summarization
-device_map_benchmark_results_dir = f'{benchmark_dir}/huggingface_device_map'
-device_map_benchmark_abstracts = 16
-device_map_strategies = ['CPU only', 'multi-GPU', 'single GPU', 'balanced', 'balanced_low_0', 'sequential']
-
-# Huggingface model quantization benchmark
-model_quantization_benchmark_results_dir = f'{benchmark_dir}/model_quantization'
-model_quantization_benchmark_abstracts = 10
-model_quantization_benchmark_quantization_strategies = [
-    'none',
-    'eight bit', 
-    'four bit', 
-    'four bit nf4',
-    'nested four bit',
-    'nested four bit nf4',
-    'none + BT',
-    'eight bit + BT', 
-    'four bit + BT', 
-    'four bit nf4 + BT',
-    'nested four bit + BT',
-    'nested four bit nf4 + BT',
-]
-
-# Data parallel summarization benchmark
-parallel_summarize_benchmark_results_dir = f'{benchmark_dir}/parallel_summarize'
-parallel_summarize_benchmark_abstracts = 120
-parallel_summarize_benchmark_replicates = 5
-parallel_summarize_device_map_strategies = ['GPU', 'CPU physical cores', 'CPU hyperthreading']
-parallel_summarize_num_CPU_jobs = [1, 2, 5, 10, 20]
-parallel_summarize_num_GPU_jobs = [4, 8, 12] # More than 3 jobs on a single GK210 crashes OOM.
-parallel_summarize_gpus = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'] # Available GPUs
-
 if __name__ == "__main__":
 
     ############################################################
     # Command line args used to select which benchmarks to run #
     ############################################################
+
+    arguments = [
+        ['--baseline_execute', 'Run MVP load, summarize, insert benchmark?'],
+        ['--sql_insert', 'Run sql insert benchmark?'],
+        ['--hf_device_map', 'Run huggingface device map benchmark?'],
+        ['--model_quantization', 'Run model quantization benchmark?'],
+        ['--batched_summarization', 'Run batched summarization benchmark?'],
+        ['--parallel_summarization', 'Run data parallel summarization benchmark?'],
+        ['--parallel_batched_summarization', 'Run data parallel batched summarization benchmark?'],
+        ['--run_all', 'Run all benchmarks?'],
+        ['--resume', 'Resume prior run and append data?']
+    ]
 
     # Instantiate command line argument parser
     parser = argparse.ArgumentParser(
@@ -82,61 +35,14 @@ if __name__ == "__main__":
     )
     
     # Add arguments
-    parser.add_argument(
-        '--load_summarize_insert', 
-        choices=[str(True), str(False)], 
-        default=str(False), 
-        help='Run MVP load, summarize, insert benchmark?'
-    )
+    for argument in arguments:
 
-    parser.add_argument(
-        '--sql_insert', 
-        choices=[str(True), str(False)], 
-        default=str(False), 
-        help='Run sql insert benchmark?'
-    )
-
-    parser.add_argument(
-        '--hf_device_map',
-        choices=[str(True), str(False)],
-        default=str(False),
-        help='Run huggingface device map benchmark?'
-    )
-
-    parser.add_argument(
-        '--model_quantization',
-        choices=[str(True), str(False)],
-        default=str(False),
-        help='Run model quantization benchmark?'
-    )
-
-    parser.add_argument(
-        '--batched_summarization',
-        choices=[str(True), str(False)],
-        default=str(False),
-        help='Run batched summarization benchmark?'
-    )
-
-    parser.add_argument(
-        '--parallel_summarization',
-        choices=[str(True), str(False)],
-        default=str(False),
-        help='Run data parallel summarization benchmark?'
-    )
-
-    parser.add_argument(
-        '--parallel_batched_summarization',
-        choices=[str(True), str(False)],
-        default=str(False),
-        help='Run data parallel batched summarization benchmark?'
-    )
-
-    parser.add_argument(
-        '--resume', 
-        choices=[str(True), str(False)], 
-        default=str(False), 
-        help='Resume prior run and append data?'
-    )
+        parser.add_argument(
+            argument[0], 
+            choices=[str(True), str(False)], 
+            default=str(False), 
+            help=argument[1]
+        )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -146,106 +52,122 @@ if __name__ == "__main__":
     #############################################
 
     # Initial load, summarize, insert timing benchmark
-    if args.load_summarize_insert == 'True':
+    if args.baseline_execute == 'True' or args.run_all == 'True':
 
-        lsi.benchmark(
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            summarize_benchmark_results_dir,
-            summarize_benchmark_abstracts,
-            summarize_benchmark_replicates
+        baseline_execute.benchmark(
+            helper_funcs=helper_funcs,
+            resume=args.resume,
+            results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
+            num_abstracts=5,
+            replicates=5,
+            **conf.SQL_SERVER_KWARGS
         )
 
     # SQL insert benchmark
-    if args.sql_insert == 'True':
+    if args.sql_insert == 'True' or args.run_all == 'True':
 
         sql.benchmark(
-            conf.MASTER_FILE_LIST,
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            insert_benchmark_results_dir,
-            insert_benchmark_abstracts,
-            insert_strategies,
-            insert_benchmark_replicates
+            helper_funcs=helper_funcs,
+            resume=args.resume,
+            master_file_list=conf.MASTER_FILE_LIST,
+            results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
+            abstract_nums=[10000, 200000, 400000],
+            replicates=5,
+            insert_strategies=[
+                'execute_many', 
+                'execute_batch', 
+                'execute_values', 
+                'mogrify', 
+                'stringIO'
+            ],
+            **conf.SQL_SERVER_KWARGS
         )
 
     # Huggingface device map strategy for summarization benchmark
-    if args.hf_device_map == 'True':
+    if args.hf_device_map == 'True' or args.run_all == 'True':
 
         device_map.benchmark(
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            device_map_benchmark_results_dir,
-            device_map_benchmark_abstracts,
-            device_map_strategies
+            helper_funcs=helper_funcs,
+            resume=args.resume,
+            results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
+            replicates=5,
+            num_abstracts=3,
+            device_map_strategies=[
+                'CPU only', 
+                'multi-GPU', 
+                'single GPU', 
+                'balanced', 
+                'balanced_low_0', 
+                'sequential'
+            ],
+            **conf.SQL_SERVER_KWARGS
         )
 
     # Model quantization benchmark
-    if args.model_quantization == 'True':
-
-        # Silence parallelism warning
-        os.environ['TOKENIZERS_PARALLELISM'] = 'true'
+    if args.model_quantization == 'True' or args.run_all == 'True':
 
         quantization.benchmark(
-            conf.DB_NAME,
-            conf.USER,
-            conf.PASSWD, 
-            conf.HOST,
-            args.resume,
-            model_quantization_benchmark_results_dir,
-            model_quantization_benchmark_abstracts,
-            model_quantization_benchmark_quantization_strategies
+            helper_funcs=helper_funcs,
+            resume=args.resume,
+            results_dir=f'{conf.BENCHMARK_DIR}/model_quantization',
+            replicates=5,
+            num_abstracts=3,
+            quantization_strategies=[
+                'none',
+                'eight bit', 
+                'four bit', 
+                'four bit nf4',
+                'nested four bit',
+                'nested four bit nf4',
+                'none + BT',
+                'eight bit + BT', 
+                'four bit + BT', 
+                'four bit nf4 + BT',
+                'nested four bit + BT',
+                'nested four bit nf4 + BT',
+            ],
+            **conf.SQL_SERVER_KWARGS
         )
 
     # Batched summarization benchmark
-    if args.batched_summarization == 'True':
+    if args.batched_summarization == 'True' or args.run_all == 'True':
 
         batched_summarization.benchmark(
             helper_funcs=helper_funcs,
             resume=args.resume,
-            results_dir=f'{benchmark_dir}/batched_summarization',
+            results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
             replicates=5,
             batches=3,
             batch_sizes=[1, 2, 4, 8, 16, 32, 64],
             quantization_strategies=['none', 'four bit'],
-            **SQL_SERVER_KWARGS
+            **conf.SQL_SERVER_KWARGS
         )
 
-
     # Data parallel summarization benchmark
-    if args.parallel_summarization == 'True':
+    if args.parallel_summarization == 'True' or args.run_all == 'True':
 
         parallel.benchmark(
             resume=args.resume,
-            results_dir=f'{benchmark_dir}/parallel_summarization',
+            results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
             replicates=5,
             batches=3,
             devices=['GPU', 'CPU'],
-            num_jobs=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
-            gpus=['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'],
-            **SQL_SERVER_KWARGS
+            workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+            gpus=conf.GPUS,
+            **conf.SQL_SERVER_KWARGS
         )
 
     # Data parallel batched summarization benchmark
-    if args.parallel_batched_summarization == 'True':
+    if args.parallel_batched_summarization == 'True' or args.run_all == 'True':
 
         parallel_batched.benchmark(
             resume=args.resume,
-            results_dir=f'{benchmark_dir}/parallel_batched_summarization',
+            results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
             replicates=5,
             batches=3,
-            batch_sizes=[1, 2, 4, 8, 16, 32],
-            GPU_jobs=[4, 8, 12, 16, 20, 24],
-            gpus=['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'],
+            batch_sizes=[16, 32, 64],
+            workers=[4, 8, 12, 16, 20, 24],
+            gpus=conf.GPUS,
             quantization_strategies=['none', 'four bit'],
-            **SQL_SERVER_KWARGS
+            **conf.SQL_SERVER_KWARGS
         )

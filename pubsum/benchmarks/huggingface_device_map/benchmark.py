@@ -1,132 +1,144 @@
 import os
+import gc
 import pandas as pd
 import psycopg2
 import time
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
+import itertools
+from typing import List, Tuple
+import transformers
 
-def benchmark(db_name, user, passwd, host, resume, results_dir, num_abstracts, device_map_strategies):
+def benchmark(
+    helper_funcs,
+    resume: bool, 
+    results_dir: str, 
+    replicates: int,
+    num_abstracts: int,
+    device_map_strategies: List[str],
+    db_name: str,
+    user: str,
+    passwd: str,
+    host: str
+):
     
-    print(f'\nRunning huggingface device map benchmark. Resume = {resume}\n')
+    print(f'\nRunning huggingface device map benchmark. Resume = {resume}.\n')
 
-    # If we are resuming a prior run, read old data and collect the
-    # completed conditions as a list of lists so we can skip them
-    if resume == 'True':
+    # Set list of keys for the data we want to collect
+    collection_vars = [
+        'replicate',
+        'abstracts',
+        'device map strategy',
+        'summarization time (sec.)',
+        'summarization rate (abstracts/sec.)'
+    ]
 
-        # Read existing results if any
-        if os.path.exists(f'{results_dir}/results.csv'):
+    # Subset of independent vars which are sufficient to uniquely identify each run
+    unique_collection_vars = [
+        'device map strategy',
+        'replicate'
+    ]
 
-            old_results_df = pd.read_csv(f'{results_dir}/results.csv')
+    # Handel resume request by reading or emptying old data, as appropriate
+    completed_runs = helper_funcs.resume_run(
+        resume=resume, 
+        results_dir=results_dir,
+        collection_vars=collection_vars,
+        unique_collection_vars=unique_collection_vars
+    )
 
-            completed_runs = list(zip(
-                old_results_df['abstract'].to_list(),
-                old_results_df['device map strategy'].to_list()
-            ))
+    # Construct parameter sets
+    replicate_numbers = list(range(1, replicates + 1))
 
-            print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
+    parameter_sets = itertools.product(
+        device_map_strategies,
+        replicate_numbers
+    )
 
-        else:
-            print(f'No data to resume from, starting from scratch.')
-            completed_runs = []
+    # Loop on parameter sets
+    for parameter_set in parameter_sets:
 
-    # If we are not resuming an old run, empty datafile if it exists
-    else:
-        # Initialize and save empty results object
-        results = Results(results_dir)
-        results.save_result(overwrite = True)
+        # Check if we have already completed this parameter set
+        if parameter_set not in completed_runs:
 
-        # Set completed runs to empty list
-        completed_runs = []
+            # Unpack parameters from set
+            device_map_strategy, replicate = parameter_set
 
+            print(f'\nHF device map strategy benchmark:\n')
+            print(f' Replicate: {replicate} of {replicates}')
+            print(f' Device map strategy: {device_map_strategy}')
 
-    for device_map_strategy in device_map_strategies:
+            # Instantiate results object for this run
+            results = helper_funcs.Results(
+                results_dir=results_dir,
+                collection_vars=collection_vars
+            )
 
-        print(f'Starting benchmark run on {num_abstracts} abstracts with device map strategy {device_map_strategy}.')
+            # Fire up the model for this run
+            model, tokenizer, gen_cfg = start_llm(device_map_strategy=device_map_strategy)
 
-        # Fire up the model for this run
-        model, tokenizer, gen_cfg = start_llm(device_map_strategy)
+            # Get rows from abstracts table
+            rows = helper_funcs.get_rows(
+                db_name=db_name, 
+                user=user, 
+                passwd=passwd, 
+                host=host, 
+                num_abstracts=num_abstracts
+            )
 
-        # Get rows from abstracts table
-        rows = get_rows(db_name, user, passwd, host, num_abstracts)
+            # Do and time the summaries
+            summarization_start = time.time()
 
-        # Loop on rows
-        row_count = 1
+            # Loop on rows
+            row_count = 0
 
-        for row in rows:
+            for row in rows:
 
-            run_tuple = (row_count, device_map_strategy)
+                row_count += 1
+                print(f' Summarizing abstract: {row_count} of {num_abstracts}')
 
-            if run_tuple not in completed_runs:
-
-                # Instantiate results object for this run
-                results = Results(results_dir)
-
-                # Get PMCID and abstract text for this row
-                pmcid = row[0]
+                # Get abstract text for this row
                 abstract = row[1]
 
-                # Make sure this abstract actually has content to be summarized
-                if abstract != None:
-
-                    # Collect run parameters to results
-                    results.data['abstract'].append(row_count)
-                    results.data['device map strategy'].append(device_map_strategy)
-                    print(f'Summarizing {pmcid}: {row_count} of {num_abstracts}')
-
-                    # Do and time the summary
-                    summarization_start = time.time()
-                    summary = summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy)
-                    dT = time.time() - summarization_start
-                    results.data['summarization time (sec.)'].append(dT)
-                    results.data['summarization rate (abstracts/sec.)'].append(1/dT)
-
-                    # Save the result
-                    results.save_result()
+                # Decide if we need to move encoding to GPU
+                if device_map_strategy != 'CPU only':
+                    use_GPU = True
 
                 else:
-                    print(f'Empty abstract.')
+                    use_GPU = False
 
-            row_count += 1
+                summary = helper_funcs.summarize(
+                    abstracts=[abstract], 
+                    model=model, 
+                    tokenizer=tokenizer, 
+                    gen_cfg=gen_cfg, 
+                    use_GPU=use_GPU
+                )
 
-        print('Done.\n')
+            dT = time.time() - summarization_start
 
-    print()
+            # Collect results
+            results.data['replicate'].append(replicate)
+            results.data['abstracts'].append(num_abstracts)
+            results.data['device map strategy'].append(device_map_strategy)
+            results.data['summarization time (sec.)'].append(dT)
+            results.data['summarization rate (abstracts/sec.)'].append(1/dT)
 
-def get_rows(db_name, user, passwd, host, num_abstracts):
-        
-    # Open connection to PUBMED database on postgreSQL server, create connection
-    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
+            # Save the result
+            results.save_result()
 
-    # Start new reader cursor
-    read_cursor = connection.cursor()
-
-    # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
-    # the article parsing script and not put empty abstracts into the SQL database. Let's do
-    # that later, but this will work for now to get us were we want to go. Also, this is not
-    # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
-    # is irrelevant
-
-    # Get 2x the number of rows we want
-    read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
-
-    # Collect non-empty rows until we have enough
-    rows = []
-
-    for row in read_cursor:
-
-        abstract = row[1]
-
-        if abstract != None:
-            rows.append(row)
-
-        if len(rows) == num_abstracts:
-            break
-        
-    read_cursor.close()
-
-    return rows
+            # Get rid of model and tokenizer from run, free up memory
+            del model
+            del tokenizer
+            gc.collect()
+            torch.cuda.empty_cache()
+            
+            print(' Done.')
 
 
-def start_llm(device_map_strategy):
+def start_llm(device_map_strategy: str) -> Tuple[
+    transformers.T5ForConditionalGeneration, 
+    transformers.T5TokenizerFast, 
+    transformers.GenerationConfig
+]:
         
         # Translate device map strategy for huggingface. Start with
         # device map set to CPU only by default
@@ -147,79 +159,15 @@ def start_llm(device_map_strategy):
         elif device_map_strategy == 'sequential':
             device_map = 'sequential'
 
-        model = AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map = device_map)
+        model = transformers.AutoModelForSeq2SeqLM.from_pretrained("haining/scientific_abstract_simplification", device_map = device_map)
         
         # Load generation config from model and set some parameters as desired
-        gen_cfg = GenerationConfig.from_model_config(model.config)
+        gen_cfg = transformers.GenerationConfig.from_model_config(model.config)
         gen_cfg.max_length = 256
         gen_cfg.top_p = 0.9
         gen_cfg.do_sample = True
 
         # Initialize the tokenizer
-        tokenizer = AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
-
-        # Set prompt to prepend to abstracts
-        #instruction = "summarize, simplify, and contextualize: "
+        tokenizer = transformers.AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
 
         return model, tokenizer, gen_cfg
-
-def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
-        
-    # Prepend the prompt to this abstract and encode
-    encoding = tokenizer(
-        'summarize, simplify, and contextualize: ' + abstract, 
-        max_length = 672, 
-        padding = 'max_length', 
-        truncation = True, 
-        return_tensors = 'pt'
-    )
-
-    # Move to GPU if appropriate
-    if device_map_strategy != 'CPU only':
-        encoding = encoding.to('cuda')
-    
-    # Generate summary
-    decoded_ids = model.generate(
-        input_ids = encoding['input_ids'],
-        attention_mask = encoding['attention_mask'], 
-        generation_config = gen_cfg
-    )
-    
-    # Decode summary
-    summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
-
-    return summary
-
-class Results:
-    '''Class to hold objects and methods for
-    collection of results'''
-
-    def __init__(self, results_dir):
-
-        # Output file for results
-        self.output_file = f'{results_dir}/results.csv'
-
-        # Independent vars for run
-        self.data = {}
-        self.data['abstract'] = []
-        self.data['device map strategy'] = []
-        self.data['summarization time (sec.)'] = []
-        self.data['summarization rate (abstracts/sec.)'] = []
-
-    def save_result(self, overwrite = False):
-
-        # Make dataframe of new results
-        results_df = pd.DataFrame(self.data)
-
-        if overwrite == False:
-
-            # Read existing results if any and concatenate new results
-            if os.path.exists(self.output_file):
-                old_results_df = pd.read_csv(self.output_file)
-                results_df = pd.concat([old_results_df, results_df])
-
-        else:
-            print('Clearing any old results.')
-
-        # Save results for run to csv
-        results_df.to_csv(self.output_file, index = False)
