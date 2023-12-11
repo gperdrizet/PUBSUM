@@ -1,8 +1,5 @@
-import os
 import gc
 from typing import List, Tuple
-import pandas as pd
-import psycopg2
 import time
 import torch
 import itertools
@@ -66,6 +63,10 @@ def benchmark(
         replicate_numbers
     )
 
+    # List to hold parameter sets that cause out-of-memory crashes
+    # (quantization, workers, batch_size) - replicate number omitted
+    oom_parameter_sets = []
+
     if len(quantization_strategies) * len(workers) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
         print('Run is complete')
     
@@ -83,6 +84,7 @@ def benchmark(
                 # Calculate total abstracts needed for job
                 num_abstracts = batches * batch_size
 
+                # Print run parameters
                 print(f'\nParallel batched summarization:\n')
                 print(f' Replicate: {replicate}')
                 print(f' Model quantization: {quantization}')
@@ -105,72 +107,89 @@ def benchmark(
                 results.data['workers per GPU'].append(workers // len(gpus))
                 results.data['quantization'].append(quantization)
 
-                # start a counter to pick GPUs for jobs
-                gpu_index = 0
+                # Then, check to see if this parameter set has caused an
+                # out of memory crash on a previous replicate, if it has
+                # skip it and add OOM flag to results directly. To do this
+                # we need to omit the replicate number and compare only on
+                # quantization, workers and batch size
+                if parameter_set[:-1] in oom_parameter_sets:
 
-                # Instantiate pool with one member for each job we need to run
-                pool = mp.Pool(
-                    processes = workers,
-                    maxtasksperchild = 1
-                )
+                    print(' Skipping parameter set due to prior OOMs.')
 
-                # Start timer
-                start = time.time()
-
-                # Collector for returns from workers
-                async_results = []
-
-                # Loop on jobs for this run
-                for i in list(range(0, workers)):
-
-                    # Pick GPU
-                    gpu = gpus[gpu_index]
-
-                    async_results.append(
-                        pool.apply_async(start_job,
-                            args = (
-                                i,
-                                db_name,
-                                user,
-                                passwd,
-                                host,
-                                num_abstracts,
-                                batches,
-                                batch_size,
-                                gpu_index,
-                                gpu,
-                                quantization
-                            )
-                        )
-                    )
-
-                    # Increment GPU index - we have four GPUs, so when the index gets 
-                    # to 3 (0 anchored), reset it back to 0, otherwise increment it.
-                    if gpu_index == 3:
-                        gpu_index = 0
-                    
-                    else:
-                        gpu_index += 1
-
-                # Clean up
-                pool.close()
-                pool.join()
-
-                # Stop the timer
-                dT = time.time() - start
-
-                # Get the results
-                result = [async_result.get() for async_result in async_results]
-                print(f'\n Workers succeeded: {result}')
-
-                # Collect and save data, if we returned an OOM error, mark it in the results
-                if False not in result:
-                    results.data['summarization time (sec.)'].append(dT)
-                    results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
-
-                else:
                     results.data['summarization time (sec.)'].append('OOM')
                     results.data['summarization rate (abstracts/sec.)'].append('OOM')
+
+                # If we have not crashed on this parameter set before, do the run
+                else:
+
+                    # start a counter to pick GPUs for jobs
+                    gpu_index = 0
+
+                    # Instantiate pool with one member for each job we need to run
+                    pool = mp.Pool(
+                        processes = workers,
+                        maxtasksperchild = 1
+                    )
+
+                    # Start timer
+                    start = time.time()
+
+                    # Collector for returns from workers
+                    async_results = []
+
+                    # Loop on jobs for this run
+                    for i in list(range(0, workers)):
+
+                        # Pick GPU
+                        gpu = gpus[gpu_index]
+
+                        async_results.append(
+                            pool.apply_async(start_job,
+                                args = (
+                                    i,
+                                    db_name,
+                                    user,
+                                    passwd,
+                                    host,
+                                    num_abstracts,
+                                    batches,
+                                    batch_size,
+                                    gpu_index,
+                                    gpu,
+                                    quantization
+                                )
+                            )
+                        )
+
+                        # Increment GPU index - we have four GPUs, so when the index gets 
+                        # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+                        if gpu_index == 3:
+                            gpu_index = 0
+                        
+                        else:
+                            gpu_index += 1
+
+                    # Clean up
+                    pool.close()
+                    pool.join()
+
+                    # Stop the timer
+                    dT = time.time() - start
+
+                    # Get the results
+                    result = [async_result.get() for async_result in async_results]
+                    print(f'\n Workers succeeded: {result}')
+
+                    # Collect and save timing data, if we returned an OOM error, mark it in the results
+                    # and save the parameter set that caused the crash
+                    if False not in result:
+                        results.data['summarization time (sec.)'].append(dT)
+                        results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
+
+                    else:
+                        results.data['summarization time (sec.)'].append('OOM')
+                        results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                        oom_parameter_sets.append((quantization, workers, batch_size))
 
                 results.save_result()
 
@@ -213,13 +232,13 @@ def start_job(
 
         batch_count = 0
 
-        for i in range(batches):
+        for n in range(batches):
 
             batch_count += 1
-            print(f' Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
+            print(f' Job {i}: summarizing batch {batch_count} of {batches}.')
 
             # Get the batch
-            batch = rows[i*batch_size:(i+1)*batch_size]
+            batch = rows[n*batch_size:(n+1)*batch_size]
 
             # Get abstract texts for this batch
             abstracts = [row[1] for row in batch]
@@ -233,7 +252,7 @@ def start_job(
                 use_GPU=True
             )
 
-            print(f' Job {i}: finished batch {batch_count} of {batches}: {len(batch)} abstracts.')
+            print(f' Job {i}: finished batch {batch_count} of {batches}')
 
     except torch.cuda.OutOfMemoryError as oom:
 
