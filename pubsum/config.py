@@ -1,5 +1,4 @@
 import os
-import torch
 import do_not_commit as secrets
 
 # Get path to this config file so that we can define
@@ -50,12 +49,10 @@ FILE_LISTS = [
 # PostgreSQL database parameters #
 ##################################
 
-SQL_SERVER_KWARGS = {
-    'host': '192.168.2.1',
-    'db_name': 'postgres',
-    'user': 'postgres',
-    'passwd': secrets.passwd
-}
+HOST = '192.168.2.1'
+DB_NAME = 'postgres'
+USER = 'postgres'
+PASSWD = secrets.passwd
 
 ################################
 # XML article parsing settings #
@@ -72,4 +69,5 @@ NUM_WORKERS = 16
 BENCHMARK_DIR = f'{PROJECT_ROOT_PATH}/benchmarks/'
 
 # Available GPUs
-GPUS = [f'cuda:{i}' for i in range(torch.cuda.device_count())]
+#GPUS = [f'cuda:{i}' for i in range(torch.cuda.device_count())]
+GPUS = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3']
