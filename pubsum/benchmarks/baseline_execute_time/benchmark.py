@@ -20,7 +20,7 @@ def benchmark(
     host: str
 ):
 
-    print(f'\nRunning baseline execution time benchmark. Resume = {resume}.\n')
+    print(f'\nRunning baseline execution time benchmark. Resume = {resume}.')
 
     # Keys for data collection
     collection_vars = [
@@ -45,132 +45,138 @@ def benchmark(
         replicates=replicates
     )
 
-    # Connect to postgresql server
-    print('Connecting to SQL server.')
-    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
+    if replicate < replicates:
 
-    # Make table for results
-    make_target_table(connection)
+        # Connect to postgresql server
+        print('Connecting to SQL server.')
+        connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
 
-    # Fire up the LLM
-    model, tokenizer, gen_cfg = start_llm()
+        # Make table for results
+        make_target_table(connection)
 
-    # Loop on replicates
-    while replicate <= replicates:
+        # Fire up the LLM
+        model, tokenizer, gen_cfg = start_llm()
 
-        print(f'\nBaseline execution time benchmark:\n')
-        print(f' Replicate: {replicate} of {replicates}')
-        print(f' Abstracts: {num_abstracts}\n')
+        # Loop on replicates
+        while replicate <= replicates:
 
-        # Create result collector for this replicate
-        results = helper_funcs.Results(
-            results_dir=results_dir,
-            collection_vars=collection_vars
-        )
+            print(f'\nBaseline execution time benchmark:\n')
+            print(f' Replicate: {replicate} of {replicates}')
+            print(f' Abstracts: {num_abstracts}\n')
 
-        # Create a cursor for writing
-        write_cursor = connection.cursor()
-
-        # Loop on abstracts in this replicate and time everything
-        row_count = 0
-        replicate_start = time.time()
-        total_summarization_time = 0
-        total_insert_time = 0
-
-        # Get rows from abstracts table
-        rows = helper_funcs.get_rows(
-            db_name=db_name, 
-            user=user, 
-            passwd=passwd, 
-            host=host, 
-            num_abstracts=num_abstracts
-        )
-
-        for row in rows:
-
-            row_count += 1
-
-            print(f' Processing abstract {row_count} of {num_abstracts}.')
-
-            # Parse row into article accession number and abstract text
-            pmcid = row[0]
-            abstract = row[1]
-
-            # Time the LLM doing it's thing
-            summarization_start = time.time()
-
-            # Do the summary
-            summary = summarize(
-                abstract=abstract,
-                model=model, 
-                tokenizer=tokenizer, 
-                gen_cfg=gen_cfg
-            )
-                
-            # Stop the summarization timer and add the dT to the total
-            summarization_end = time.time()
-            total_summarization_time += summarization_end - summarization_start
-
-            # Start the SQL insert timer
-            insert_start = time.time()
-
-            # Insert the summary text into the SQL table
-            write_cursor.execute(
-                "INSERT INTO summary_benchmark (pmc_id, abstract_summary) VALUES(%s, %s)", 
-                (pmcid, summary)
+            # Create result collector for this replicate
+            results = helper_funcs.Results(
+                results_dir=results_dir,
+                collection_vars=collection_vars
             )
 
-            connection.commit()
+            # Create a cursor for writing
+            write_cursor = connection.cursor()
 
-            # Stop the insert timer and add the dT to the total
-            insert_end = time.time()
-            total_insert_time += insert_end - insert_start
+            # Loop on abstracts in this replicate and time everything
+            row_count = 0
+            replicate_start = time.time()
+            total_summarization_time = 0
+            total_insert_time = 0
 
-        # Stop iteration timer
-        replicate_end = time.time()
+            # Get rows from abstracts table
+            rows = helper_funcs.get_rows(
+                db_name=db_name, 
+                user=user, 
+                passwd=passwd, 
+                host=host, 
+                num_abstracts=num_abstracts
+            )
 
-        # Calculate total time to complete this replicate
-        total_replicate_time = replicate_end - replicate_start
+            for row in rows:
 
-        # Calculate average time to complete one abstract in this replicate
-        mean_total_time = total_replicate_time / row_count
+                row_count += 1
 
-        # Calculate average summarization time
-        mean_summarization_time = total_summarization_time / row_count
+                print(f' Processing abstract {row_count} of {num_abstracts}.')
 
-        # Calculate mean insert time
-        mean_insert_time = total_insert_time / row_count
+                # Parse row into article accession number and abstract text
+                pmcid = row[0]
+                abstract = row[1]
 
-        # Calculate total load time
-        total_loading_time = total_replicate_time - total_summarization_time - total_insert_time
+                # Time the LLM doing it's thing
+                summarization_start = time.time()
 
-        # Calculate mean load time
-        mean_loading_time = total_loading_time / row_count
+                # Do the summary
+                summary = summarize(
+                    abstract=abstract,
+                    model=model, 
+                    tokenizer=tokenizer, 
+                    gen_cfg=gen_cfg
+                )
+                    
+                # Stop the summarization timer and add the dT to the total
+                summarization_end = time.time()
+                total_summarization_time += summarization_end - summarization_start
 
-        # Collect data from this replicate
-        results.data['replicate'].append(replicate)
-        results.data['num_abstracts'].append(row_count)
-        results.data['total_replicate_time'].append(total_replicate_time)
-        results.data['total_summarization_time'].append(total_summarization_time)
-        results.data['total_insert_time'].append(total_insert_time)
-        results.data['total_loading_time'].append(total_loading_time)
-        results.data['mean_total_time'].append(mean_total_time)
-        results.data['mean_summarization_time'].append(mean_summarization_time)
-        results.data['mean_insert_time'].append(mean_insert_time)
-        results.data['mean_loading_time'].append(mean_loading_time)
+                # Start the SQL insert timer
+                insert_start = time.time()
 
-        # Close our cursor for next replicate
-        write_cursor.close()
+                # Insert the summary text into the SQL table
+                write_cursor.execute(
+                    "INSERT INTO summary_benchmark (pmc_id, abstract_summary) VALUES(%s, %s)", 
+                    (pmcid, summary)
+                )
 
-        # Save the results from this replicate
-        results.save_result()
+                connection.commit()
 
-        replicate += 1
-        print(' Done.')
+                # Stop the insert timer and add the dT to the total
+                insert_end = time.time()
+                total_insert_time += insert_end - insert_start
 
-    # Get rid of model and tokenizer from run, free up memory
-    gc.collect()
-    torch.cuda.empty_cache()
+            # Stop iteration timer
+            replicate_end = time.time()
+
+            # Calculate total time to complete this replicate
+            total_replicate_time = replicate_end - replicate_start
+
+            # Calculate average time to complete one abstract in this replicate
+            mean_total_time = total_replicate_time / row_count
+
+            # Calculate average summarization time
+            mean_summarization_time = total_summarization_time / row_count
+
+            # Calculate mean insert time
+            mean_insert_time = total_insert_time / row_count
+
+            # Calculate total load time
+            total_loading_time = total_replicate_time - total_summarization_time - total_insert_time
+
+            # Calculate mean load time
+            mean_loading_time = total_loading_time / row_count
+
+            # Collect data from this replicate
+            results.data['replicate'].append(replicate)
+            results.data['num_abstracts'].append(row_count)
+            results.data['total_replicate_time'].append(total_replicate_time)
+            results.data['total_summarization_time'].append(total_summarization_time)
+            results.data['total_insert_time'].append(total_insert_time)
+            results.data['total_loading_time'].append(total_loading_time)
+            results.data['mean_total_time'].append(mean_total_time)
+            results.data['mean_summarization_time'].append(mean_summarization_time)
+            results.data['mean_insert_time'].append(mean_insert_time)
+            results.data['mean_loading_time'].append(mean_loading_time)
+
+            # Close our cursor for next replicate
+            write_cursor.close()
+
+            # Save the results from this replicate
+            results.save_result()
+
+            replicate += 1
+            print(' Done.')
+
+        # Get rid of model and tokenizer from run, free up memory
+        del model
+        del tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    return True
 
 def resume_run(
     helper_funcs,

@@ -21,7 +21,7 @@ def benchmark(
     host: str
 ):
     
-    print(f'\nRunning huggingface device map benchmark. Resume = {resume}.\n')
+    print(f'\nRunning huggingface device map benchmark. Resume = {resume}.')
 
     # Set list of keys for the data we want to collect
     collection_vars = [
@@ -54,85 +54,92 @@ def benchmark(
         replicate_numbers
     )
 
-    # Loop on parameter sets
-    for parameter_set in parameter_sets:
+    if len(device_map_strategies) * len(replicate_numbers) == len(completed_runs):
+        print('Run is complete')
+    
+    else:
 
-        # Check if we have already completed this parameter set
-        if parameter_set not in completed_runs:
+        # Loop on parameter sets
+        for parameter_set in parameter_sets:
 
-            # Unpack parameters from set
-            device_map_strategy, replicate = parameter_set
+            # Check if we have already completed this parameter set
+            if parameter_set not in completed_runs:
 
-            print(f'\nHF device map strategy benchmark:\n')
-            print(f' Replicate: {replicate} of {replicates}')
-            print(f' Device map strategy: {device_map_strategy}')
+                # Unpack parameters from set
+                device_map_strategy, replicate = parameter_set
 
-            # Instantiate results object for this run
-            results = helper_funcs.Results(
-                results_dir=results_dir,
-                collection_vars=collection_vars
-            )
+                print(f'\nHF device map strategy benchmark:\n')
+                print(f' Replicate: {replicate} of {replicates}')
+                print(f' Device map strategy: {device_map_strategy}')
 
-            # Fire up the model for this run
-            model, tokenizer, gen_cfg = start_llm(device_map_strategy=device_map_strategy)
-
-            # Get rows from abstracts table
-            rows = helper_funcs.get_rows(
-                db_name=db_name, 
-                user=user, 
-                passwd=passwd, 
-                host=host, 
-                num_abstracts=num_abstracts
-            )
-
-            # Do and time the summaries
-            summarization_start = time.time()
-
-            # Loop on rows
-            row_count = 0
-
-            for row in rows:
-
-                row_count += 1
-                print(f' Summarizing abstract: {row_count} of {num_abstracts}')
-
-                # Get abstract text for this row
-                abstract = row[1]
-
-                # Decide if we need to move encoding to GPU
-                if device_map_strategy != 'CPU only':
-                    use_GPU = True
-
-                else:
-                    use_GPU = False
-
-                summary = helper_funcs.summarize(
-                    abstracts=[abstract], 
-                    model=model, 
-                    tokenizer=tokenizer, 
-                    gen_cfg=gen_cfg, 
-                    use_GPU=use_GPU
+                # Instantiate results object for this run
+                results = helper_funcs.Results(
+                    results_dir=results_dir,
+                    collection_vars=collection_vars
                 )
 
-            dT = time.time() - summarization_start
+                # Fire up the model for this run
+                model, tokenizer, gen_cfg = start_llm(device_map_strategy=device_map_strategy)
 
-            # Collect results
-            results.data['replicate'].append(replicate)
-            results.data['abstracts'].append(num_abstracts)
-            results.data['device map strategy'].append(device_map_strategy)
-            results.data['summarization time (sec.)'].append(dT)
-            results.data['summarization rate (abstracts/sec.)'].append(1/dT)
+                # Get rows from abstracts table
+                rows = helper_funcs.get_rows(
+                    db_name=db_name, 
+                    user=user, 
+                    passwd=passwd, 
+                    host=host, 
+                    num_abstracts=num_abstracts
+                )
 
-            # Save the result
-            results.save_result()
+                # Do and time the summaries
+                summarization_start = time.time()
 
-            # Get rid of model and tokenizer from run, free up memory
-            del model
-            del tokenizer
-            gc.collect()
-            torch.cuda.empty_cache()
-            
-            print(' Done.')
+                # Loop on rows
+                row_count = 0
+
+                for row in rows:
+
+                    row_count += 1
+                    print(f' Summarizing abstract: {row_count} of {num_abstracts}')
+
+                    # Get abstract text for this row
+                    abstract = row[1]
+
+                    # Decide if we need to move encoding to GPU
+                    if device_map_strategy != 'CPU only':
+                        use_GPU = True
+
+                    else:
+                        use_GPU = False
+
+                    summary = helper_funcs.summarize(
+                        abstracts=[abstract], 
+                        model=model, 
+                        tokenizer=tokenizer, 
+                        gen_cfg=gen_cfg, 
+                        use_GPU=use_GPU
+                    )
+
+                dT = time.time() - summarization_start
+
+                # Collect results
+                results.data['replicate'].append(replicate)
+                results.data['abstracts'].append(num_abstracts)
+                results.data['device map strategy'].append(device_map_strategy)
+                results.data['summarization time (sec.)'].append(dT)
+                results.data['summarization rate (abstracts/sec.)'].append(1/dT)
+
+                # Save the result
+                results.save_result()
+
+                # Get rid of model and tokenizer from run, free up memory
+                del model
+                del tokenizer
+                gc.collect()
+                torch.cuda.empty_cache()
+                
+                print(' Done.')
+
+    return True
 
 
 def start_llm(device_map_strategy: str) -> Tuple[

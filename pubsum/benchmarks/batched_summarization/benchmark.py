@@ -20,7 +20,7 @@ def benchmark(
     host: str
 ) -> bool:
     
-    print(f'\nRunning batched inference benchmark. Resume = {resume}.\n')
+    print(f'\nRunning batched summarization benchmark. Resume = {resume}.')
 
     # Set list of keys for the data we want to collect
     collection_vars = [
@@ -59,113 +59,115 @@ def benchmark(
         replicate_numbers
     )
 
-    # Loop on parameter sets
-    for parameter_set in parameter_sets:
+    if len(quantization_strategies) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
+        print('Run is complete')
+    
+    else:
 
-        # Check if we have already completed this parameter set
-        if parameter_set not in completed_runs:
+        # Loop on parameter sets
+        for parameter_set in parameter_sets:
 
-            # Unpack parameters from set
-            quantization, batch_size, replicate = parameter_set
+            # Check if we have already completed this parameter set
+            if parameter_set not in completed_runs:
 
-            # Calculate total abstracts needed for job
-            num_abstracts = batches * batch_size
+                # Unpack parameters from set
+                quantization, batch_size, replicate = parameter_set
 
-            print(f'\nBatched summarization benchmark:\n')
-            print(f' Replicate: {replicate} of {replicates}')
-            print(f' Model quantization: {quantization}')
-            print(f' Batch size: {batch_size}')
-            print(f' Batches: {batches}')
-            print(f' Abstracts: {num_abstracts}\n')
+                # Calculate total abstracts needed for job
+                num_abstracts = batches * batch_size
 
-            # Instantiate results object for this run
-            results = helper_funcs.Results(
-                results_dir=results_dir,
-                collection_vars=collection_vars
-            )
+                print(f'\nBatched summarization benchmark:\n')
+                print(f' Replicate: {replicate} of {replicates}')
+                print(f' Model quantization: {quantization}')
+                print(f' Batch size: {batch_size}')
+                print(f' Batches: {batches}')
+                print(f' Abstracts: {num_abstracts}\n')
 
-            # Collect data for run parameters
-            results.data['abstracts'].append(num_abstracts)
-            results.data['replicate'].append(replicate)
-            results.data['quantization'].append(quantization)
-            results.data['batches'].append(batches)
-            results.data['batch size'].append(batch_size)
-
-            # Fence to catch out of memory errors
-            try:
-                # Fire up the model for this run
-                model, tokenizer, gen_cfg = start_llm(quantization=quantization)
-                model_memory_footprint = model.get_memory_footprint()
-
-                # Get enough rows to batch from abstracts table
-                rows = helper_funcs.get_rows(
-                    db_name=db_name, 
-                    user=user, 
-                    passwd=passwd, 
-                    host=host, 
-                    num_abstracts=num_abstracts
+                # Instantiate results object for this run
+                results = helper_funcs.Results(
+                    results_dir=results_dir,
+                    collection_vars=collection_vars
                 )
 
-                # Start the batch loop
-                batch_count = 0
-                summarization_start = time.time()
+                # Collect data for run parameters
+                results.data['abstracts'].append(num_abstracts)
+                results.data['replicate'].append(replicate)
+                results.data['quantization'].append(quantization)
+                results.data['batches'].append(batches)
+                results.data['batch size'].append(batch_size)
 
-                for i in range(batches):
+                # Fence to catch out of memory errors
+                try:
+                    # Fire up the model for this run
+                    model, tokenizer, gen_cfg = start_llm(quantization=quantization)
+                    model_memory_footprint = model.get_memory_footprint()
 
-                    batch_count += 1
-                    print(f' Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
-
-                    # Get the batch
-                    batch = rows[i*batch_size:(i+1)*batch_size]
-
-                    # Get abstract texts for this batch
-                    abstracts = [row[1] for row in batch]
-
-                    # Do the summary
-                    summaries = helper_funcs.summarize(
-                        abstracts=abstracts,
-                        model=model,
-                        tokenizer=tokenizer, 
-                        gen_cfg=gen_cfg,
-                        use_GPU=True
+                    # Get enough rows to batch from abstracts table
+                    rows = helper_funcs.get_rows(
+                        db_name=db_name, 
+                        user=user, 
+                        passwd=passwd, 
+                        host=host, 
+                        num_abstracts=num_abstracts
                     )
 
-                # Stop the clock
-                dT = time.time() - summarization_start
+                    # Start the batch loop
+                    batch_count = 0
+                    summarization_start = time.time()
 
-                # Get max memory used and reset
-                max_memory = torch.cuda.max_memory_allocated()
+                    for i in range(batches):
+
+                        batch_count += 1
+                        print(f' Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
+
+                        # Get the batch
+                        batch = rows[i*batch_size:(i+1)*batch_size]
+
+                        # Get abstract texts for this batch
+                        abstracts = [row[1] for row in batch]
+
+                        # Do the summary
+                        summaries = helper_funcs.summarize(
+                            abstracts=abstracts,
+                            model=model,
+                            tokenizer=tokenizer, 
+                            gen_cfg=gen_cfg,
+                            use_GPU=True
+                        )
+
+                    # Stop the clock
+                    dT = time.time() - summarization_start
+
+                    # Get max memory used and reset
+                    max_memory = torch.cuda.max_memory_allocated()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
+
+                    # Collect run results
+                    results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
+                    results.data['max memory allocated (bytes)'].append(max_memory)
+                    results.data['summarization time (sec.)'].append(dT)
+                    results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
+
+                # Catch out of memory errors
+                except torch.cuda.OutOfMemoryError as oom:
+                    print(f'\n {oom}\n')
+
+                    # Since we failed on OOM, mark it in results
+                    results.data['model GPU memory footprint (bytes)'].append('OOM')
+                    results.data['max memory allocated (bytes)'].append('OOM')
+                    results.data['summarization time (sec.)'].append('OOM')
+                    results.data['summarization rate (abstracts/sec.)'].append('OOM')
+
+                # Get rid of model and tokenizer from run, free up memory
+                del model
+                del tokenizer
+                gc.collect()
                 torch.cuda.empty_cache()
-                torch.cuda.reset_peak_memory_stats()
 
-                # Collect run results
-                results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
-                results.data['max memory allocated (bytes)'].append(max_memory)
-                results.data['summarization time (sec.)'].append(dT)
-                results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
-
-            # Catch out of memory errors
-            except torch.cuda.OutOfMemoryError as oom:
-                print(f'\n {oom}\n')
-
-                # Since we failed on OOM, mark it in results
-                results.data['model GPU memory footprint (bytes)'].append('OOM')
-                results.data['max memory allocated (bytes)'].append('OOM')
-                results.data['summarization time (sec.)'].append('OOM')
-                results.data['summarization rate (abstracts/sec.)'].append('OOM')
-
-            # Save the result
-            results.save_result()
-
-            # Get rid of model and tokenizer from run, free up memory
-            del model
-            del tokenizer
-            gc.collect()
-            torch.cuda.empty_cache()
-
-            print(' Done.')
-
-    print()
+                # Save the result
+                results.save_result()
+                print(' Done.')
 
     return True
 

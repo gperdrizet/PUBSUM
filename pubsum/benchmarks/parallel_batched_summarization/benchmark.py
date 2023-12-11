@@ -25,7 +25,7 @@ def benchmark(
     host: str
 ) -> bool:
     
-    print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.\n')
+    print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.')
 
     # Set list of keys for the data we want to collect
     collection_vars = [
@@ -66,108 +66,113 @@ def benchmark(
         replicate_numbers
     )
 
-    # Loop on parameter sets to run jobs
-    for parameter_set in parameter_sets:
+    if len(quantization_strategies) * len(workers) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
+        print('Run is complete')
+    
+    else:
 
-        # Check if we have already completed this parameter set
-        if parameter_set not in completed_runs:
+        # Loop on parameter sets to run jobs
+        for parameter_set in parameter_sets:
 
-            # Unpack parameters from set
-            quantization, workers, batch_size, replicate = parameter_set
+            # Check if we have already completed this parameter set
+            if parameter_set not in completed_runs:
 
-            # Calculate total abstracts needed for job
-            num_abstracts = batches * batch_size
+                # Unpack parameters from set
+                quantization, workers, batch_size, replicate = parameter_set
 
-            print(f'\nParallel batched summarization:\n')
-            print(f' Replicate: {replicate}')
-            print(f' Model quantization: {quantization}')
-            print(f' Batch size: {batch_size}')
-            print(f' Batches: {batches}')
-            print(f' Workers: {workers}\n')
+                # Calculate total abstracts needed for job
+                num_abstracts = batches * batch_size
 
-            # Instantiate results object for this run
-            results = helper_funcs.Results(
-                results_dir=results_dir,
-                collection_vars=collection_vars
-            )
+                print(f'\nParallel batched summarization:\n')
+                print(f' Replicate: {replicate}')
+                print(f' Model quantization: {quantization}')
+                print(f' Batch size: {batch_size}')
+                print(f' Batches: {batches}')
+                print(f' Workers: {workers}\n')
 
-            # Collect data for run parameters
-            results.data['abstracts'].append(num_abstracts)
-            results.data['replicate'].append(replicate)
-            results.data['batches'].append(batches)
-            results.data['batch size'].append(batch_size)
-            results.data['workers'].append(workers)
-            results.data['workers per GPU'].append(workers // len(gpus))
-            results.data['quantization'].append(quantization)
-
-            # start a counter to pick GPUs for jobs
-            gpu_index = 0
-
-            # Instantiate pool with one member for each job we need to run
-            pool = mp.Pool(
-                processes = workers,
-                maxtasksperchild = 1
-            )
-
-            # Start timer
-            start = time.time()
-
-            # Collector for returns from workers
-            async_results = []
-
-            # Loop on jobs for this run
-            for i in list(range(0, workers)):
-
-                # Pick GPU
-                gpu = gpus[gpu_index]
-
-                async_results.append(
-                    pool.apply_async(start_job,
-                        args = (
-                            i,
-                            db_name,
-                            user,
-                            passwd,
-                            host,
-                            num_abstracts,
-                            batches,
-                            batch_size,
-                            gpu_index,
-                            gpu,
-                            quantization
-                        )
-                    )
+                # Instantiate results object for this run
+                results = helper_funcs.Results(
+                    results_dir=results_dir,
+                    collection_vars=collection_vars
                 )
 
-                # Increment GPU index - we have four GPUs, so when the index gets 
-                # to 3 (0 anchored), reset it back to 0, otherwise increment it.
-                if gpu_index == 3:
-                    gpu_index = 0
-                
+                # Collect data for run parameters
+                results.data['abstracts'].append(num_abstracts)
+                results.data['replicate'].append(replicate)
+                results.data['batches'].append(batches)
+                results.data['batch size'].append(batch_size)
+                results.data['workers'].append(workers)
+                results.data['workers per GPU'].append(workers // len(gpus))
+                results.data['quantization'].append(quantization)
+
+                # start a counter to pick GPUs for jobs
+                gpu_index = 0
+
+                # Instantiate pool with one member for each job we need to run
+                pool = mp.Pool(
+                    processes = workers,
+                    maxtasksperchild = 1
+                )
+
+                # Start timer
+                start = time.time()
+
+                # Collector for returns from workers
+                async_results = []
+
+                # Loop on jobs for this run
+                for i in list(range(0, workers)):
+
+                    # Pick GPU
+                    gpu = gpus[gpu_index]
+
+                    async_results.append(
+                        pool.apply_async(start_job,
+                            args = (
+                                i,
+                                db_name,
+                                user,
+                                passwd,
+                                host,
+                                num_abstracts,
+                                batches,
+                                batch_size,
+                                gpu_index,
+                                gpu,
+                                quantization
+                            )
+                        )
+                    )
+
+                    # Increment GPU index - we have four GPUs, so when the index gets 
+                    # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+                    if gpu_index == 3:
+                        gpu_index = 0
+                    
+                    else:
+                        gpu_index += 1
+
+                # Clean up
+                pool.close()
+                pool.join()
+
+                # Stop the timer
+                dT = time.time() - start
+
+                # Get the results
+                result = [async_result.get() for async_result in async_results]
+                print(f'\n Workers succeeded: {result}')
+
+                # Collect and save data, if we returned an OOM error, mark it in the results
+                if False not in result:
+                    results.data['summarization time (sec.)'].append(dT)
+                    results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
+
                 else:
-                    gpu_index += 1
+                    results.data['summarization time (sec.)'].append('OOM')
+                    results.data['summarization rate (abstracts/sec.)'].append('OOM')
 
-            # Clean up
-            pool.close()
-            pool.join()
-
-            # Stop the timer
-            dT = time.time() - start
-
-            # Get the results
-            result = [async_result.get() for async_result in async_results]
-            print(f'\n Workers succeeded: {result}')
-
-            # Collect and save data, if we returned an OOM error, mark it in the results
-            if False not in result:
-                results.data['summarization time (sec.)'].append(dT)
-                results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
-
-            else:
-                results.data['summarization time (sec.)'].append('OOM')
-                results.data['summarization rate (abstracts/sec.)'].append('OOM')
-
-            results.save_result()
+                results.save_result()
 
     return True
 
@@ -271,7 +276,9 @@ def start_llm(
         )
 
     # Initialize the tokenizer
-    tokenizer = transformers.AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        'haining/scientific_abstract_simplification'
+    )
 
     # Initialize model with selected device map
     model = transformers.AutoModelForSeq2SeqLM.from_pretrained(

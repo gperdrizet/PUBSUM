@@ -22,7 +22,7 @@ def benchmark(
     host: str, 
 ):
 
-    print(f'\nRunning SQL insert benchmark. Resume = {resume}.\n')
+    print(f'\nRunning SQL insert benchmark. Resume = {resume}.')
 
     # Set list of keys for the data we want to collect
     collection_vars = [
@@ -48,18 +48,6 @@ def benchmark(
         unique_collection_vars=unique_collection_vars
     )
 
-    # Read file list into pandas dataframe
-    print('Reading file list into pandas df.')
-    file_list_df = pd.read_csv(master_file_list)
-
-    # Extract article paths and PMC IDs
-    print('Extracting PMC ID and file path.')
-    article_paths_df = pd.DataFrame(file_list_df, columns=['AccessionID', 'Article File'])
-
-    # Connect to postgresql server
-    print('Connecting to SQL server.')
-    connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
-
     # Construct parameter sets
     replicate_numbers = list(range(1, replicates + 1))
 
@@ -69,67 +57,85 @@ def benchmark(
         replicate_numbers
     )
 
-    # Loop on parameter sets
-    for parameter_set in parameter_sets:
+    if len(insert_strategies) * len(abstract_nums) * len(replicate_numbers) == len(completed_runs):
+        print('Run was complete.')
 
-        # Check if we have already completed this parameter set
-        if parameter_set not in completed_runs:
+    else:
 
-            # Unpack parameters from set
-            insert_strategy, num_abstracts, replicate = parameter_set
+        # Read file list into pandas dataframe
+        print('Reading file list into pandas df.')
+        file_list_df = pd.read_csv(master_file_list)
 
-            print(f'\nSQL insert strategy benchmark:\n')
-            print(f' Replicate: {replicate} of {replicates}')
-            print(f' Insert strategy {insert_strategy}')
-            print(f' Abstracts: {num_abstracts}')
+        # Extract article paths and PMC IDs
+        print('Extracting PMC ID and file path.')
+        article_paths_df = pd.DataFrame(file_list_df, columns=['AccessionID', 'Article File'])
 
-            # Instantiate results object for this run
-            results = helper_funcs.Results(
-                results_dir=results_dir,
-                collection_vars=collection_vars
-            )
+        # Connect to postgresql server
+        print('Connecting to SQL server.')
+        connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
 
-            # Initialize a fresh write cursor and target table
-            write_cursor = make_target_table_write_cursor(connection=connection)
+        # Loop on parameter sets
+        for parameter_set in parameter_sets:
 
-            # Randomly pick n rows of abstracts
-            rows = article_paths_df.sample(num_abstracts)
+            # Check if we have already completed this parameter set
+            if parameter_set not in completed_runs:
 
-            # Do and time the insert
-            insert_time = insert(
-                rows=rows, 
-                insert_strategy=insert_strategy, 
-                write_cursor=write_cursor, 
-                connection=connection
-            )
+                # Unpack parameters from set
+                insert_strategy, num_abstracts, replicate = parameter_set
 
-            # Collect result
-            results.data['abstracts'].append(num_abstracts)
-            results.data['insert time (sec.)'].append(insert_time)
-            results.data['insert rate (abstracts/sec.)'].append(num_abstracts/insert_time)
-            results.data['insert strategy'].append(insert_strategy)
-            results.data['replicate'].append(replicate)
+                print(f'\nSQL insert strategy benchmark:\n')
+                print(f' Replicate: {replicate} of {replicates}')
+                print(f' Insert strategy {insert_strategy}')
+                print(f' Abstracts: {num_abstracts}')
 
-            # Save result
-            results.save_result()
+                # Instantiate results object for this run
+                results = helper_funcs.Results(
+                    results_dir=results_dir,
+                    collection_vars=collection_vars
+                )
 
-            # Clean up
-            write_cursor.close()
+                # Initialize a fresh write cursor and target table
+                write_cursor = make_target_table_write_cursor(connection=connection)
 
-            print(' Done.')
+                # Randomly pick n rows of abstracts
+                rows = article_paths_df.sample(num_abstracts)
 
-    # Clean up
-    write_cursor = connection.cursor()
+                # Do and time the insert
+                insert_time = insert(
+                    rows=rows, 
+                    insert_strategy=insert_strategy, 
+                    write_cursor=write_cursor, 
+                    connection=connection
+                )
 
-    write_cursor.execute('''
-        DROP TABLE IF EXISTS insert_benchmark
-    ''')
+                # Collect result
+                results.data['abstracts'].append(num_abstracts)
+                results.data['insert time (sec.)'].append(insert_time)
+                results.data['insert rate (abstracts/sec.)'].append(num_abstracts/insert_time)
+                results.data['insert strategy'].append(insert_strategy)
+                results.data['replicate'].append(replicate)
 
-    connection.commit()
+                # Save result
+                results.save_result()
 
-    write_cursor.close()
-    connection.close()
+                # Clean up
+                write_cursor.close()
 
+                print(' Done.')
+
+        # Clean up
+        write_cursor = connection.cursor()
+
+        write_cursor.execute('''
+            DROP TABLE IF EXISTS insert_benchmark
+        ''')
+
+        connection.commit()
+
+        write_cursor.close()
+        connection.close()
+
+    return True
 
 def make_target_table_write_cursor(
     connection: psycopg2.extensions.connection
