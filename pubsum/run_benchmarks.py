@@ -205,7 +205,12 @@ if __name__ == "__main__":
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
                 replicates=5,
                 batches=3,
-                devices=['GPU', 'CPU'],
+                devices=[
+                    'GPU', 
+                    'CPU: 1 thread per worker', 
+                    'CPU: 2 threads per worker', 
+                    'CPU: 4 threads per worker'
+                ],
                 workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
                 gpus=conf.GPUS,
                 db_name=conf.DB_NAME,

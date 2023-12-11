@@ -24,7 +24,7 @@ def benchmark(
     host: List[str]
 ) -> bool:
     
-    print(f'\nRunning data parallel summarization benchmark. Resume = {resume}.\n')
+    print(f'\nRunning data parallel summarization benchmark. Resume = {resume}.')
 
     # Set list of keys for the data we want to collect
     collection_vars = [
@@ -62,120 +62,125 @@ def benchmark(
         replicate_numbers
     )
 
-    # Loop on parameter sets to run jobs
-    for parameter_set in parameter_sets:
+    if len(devices) * len(workers) * len(replicate_numbers) == len(completed_runs):
+        print('Run is complete')
+    
+    else:
 
-        # Check if we have already completed this parameter set
-        if parameter_set not in completed_runs:
+        # Loop on parameter sets to run jobs
+        for parameter_set in parameter_sets:
 
-            # Unpack parameters from set
-            device, workers, replicate = parameter_set
+            # Check if we have already completed this parameter set
+            if parameter_set not in completed_runs:
 
-            # Calculate total abstracts needed for job
-            num_abstracts = batches * workers
+                # Unpack parameters from set
+                device, workers, replicate = parameter_set
 
-            print(f'\nParallel summarization:\n')
-            print(f' Replicate: {replicate}')
-            print(f' Device: {device}')
-            print(f' Workers: {workers}')
-            print(f' Batches: {batches}')
-            print(f' Abstracts: {num_abstracts}\n')
+                # Calculate total abstracts needed for job
+                num_abstracts = batches * workers
 
-            # Instantiate results object for this run
-            results = helper_funcs.Results(
-                results_dir=results_dir,
-                collection_vars=collection_vars
-            )
+                print(f'\nParallel summarization:\n')
+                print(f' Replicate: {replicate}')
+                print(f' Device: {device}')
+                print(f' Workers: {workers}')
+                print(f' Batches: {batches}')
+                print(f' Abstracts: {num_abstracts}\n')
 
-            # Collect data for run parameters
-            results.data['replicate'].append(replicate)
-            results.data['abstracts per worker'].append(num_abstracts // workers)
-            results.data['abstracts'].append(num_abstracts)
-            results.data['batches'].append(batches)
-            results.data['workers'].append(workers)
-            results.data['device'].append(device)
-
-            # Give torch CPU threads based on device and workers for this run, if appropriate
-            if device == 'CPU':
-                torch.set_num_threads(1)
-
-            # If this is a GPU run, start a counter to pick GPUs for jobs and give the
-            # GPU access to all CPU physical cores
-            if device == 'GPU':
-                gpu_index = 0
-                torch.set_num_threads(mp.cpu_count())
-
-            # If this run is not using GPU(s), pass none for GPU related parameters
-            else:
-                gpu_index = None
-                gpu = None
-
-            # Instantiate pool with one member for each job we need to run
-            pool = mp.Pool(
-                processes = workers,
-                maxtasksperchild = 1
-            )
-
-            # Start timer
-            start = time.time()
-
-            # Holder for returns from workers
-            async_results = []
-
-            # Loop on jobs for this run
-            for i in list(range(0, workers)):
-
-                # Pick GPU for run, if needed
-                if device == 'GPU':
-                    gpu = gpus[gpu_index]
-
-                async_results.append(
-                    pool.apply_async(start_job,
-                        args = (
-                            i, 
-                            db_name, 
-                            user, 
-                            passwd, 
-                            host, 
-                            batches, 
-                            num_abstracts, 
-                            device, 
-                            gpu_index, 
-                            gpu
-                        )
-                    )
+                # Instantiate results object for this run
+                results = helper_funcs.Results(
+                    results_dir=results_dir,
+                    collection_vars=collection_vars
                 )
 
-                # Increment GPU index if needed - we have four GPUs, so when the index gets 
-                # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+                # Collect data for run parameters
+                results.data['replicate'].append(replicate)
+                results.data['abstracts per worker'].append(num_abstracts // workers)
+                results.data['abstracts'].append(num_abstracts)
+                results.data['batches'].append(batches)
+                results.data['workers'].append(workers)
+                results.data['device'].append(device)
+
+                # If this is a GPU run, start a counter to pick GPUs for jobs
                 if device == 'GPU':
-                    if gpu_index == 3:
-                        gpu_index = 0
-                    
+                    gpu_index = 0
+
+                # If this run is not using GPU(s), pass none for GPU related parameters,
+                # and get the number of CPU threads per worker called for
+                else:
+                    gpu_index = None
+                    gpu = None
+                    threads_per_CPU_worker = int(device.split(' ')[1])
+
+                # Don't do the run if total CPU threads required is more than available
+                if device == 'GPU' or mp.cpu_count() // workers >= threads_per_CPU_worker:
+
+                    # Instantiate pool with one member for each job we need to run
+                    pool = mp.Pool(
+                        processes = workers,
+                        maxtasksperchild = 1
+                    )
+
+                    # Start timer
+                    start = time.time()
+
+                    # Holder for returns from workers
+                    async_results = []
+
+                    # Loop on jobs for this run
+                    for i in list(range(0, workers)):
+
+                        # Pick GPU for run, if needed
+                        if device == 'GPU':
+                            gpu = gpus[gpu_index]
+
+                        async_results.append(
+                            pool.apply_async(start_job,
+                                args = (
+                                    i, 
+                                    db_name, 
+                                    user, 
+                                    passwd, 
+                                    host, 
+                                    batches, 
+                                    num_abstracts, 
+                                    device, 
+                                    gpu_index, 
+                                    gpu,
+                                    threads_per_CPU_worker
+                                )
+                            )
+                        )
+
+                        # Increment GPU index if needed - we have four GPUs, so when the index gets 
+                        # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+                        if device == 'GPU':
+                            if gpu_index == 3:
+                                gpu_index = 0
+                            
+                            else:
+                                gpu_index += 1
+
+                    # Clean up
+                    pool.close()
+                    pool.join()
+
+                    # Stop the timer
+                    dT = time.time() - start
+
+                    # Get the results
+                    result = [async_result.get() for async_result in async_results]
+                    print(f'\n Workers succeeded: {result}')
+
+                    # Collect and save data, if we returned an OOM error, mark it in the results
+                    if False not in result:
+                        results.data['summarization time (sec.)'].append(dT)
+                        results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
+
                     else:
-                        gpu_index += 1
+                        results.data['summarization time (sec.)'].append('OOM')
+                        results.data['summarization rate (abstracts/sec.)'].append('OOM')
 
-            # Clean up
-            pool.close()
-            pool.join()
-
-            # Stop the timer
-            dT = time.time() - start
-
-            # Get the results
-            result = [async_result.get() for async_result in async_results]
-            print(f'\n Workers succeeded: {result}')
-
-            # Collect and save data, if we returned an OOM error, mark it in the results
-            if False not in result:
-                results.data['summarization time (sec.)'].append(dT)
-                results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
-
-            else:
-                results.data['summarization time (sec.)'].append('OOM')
-                results.data['summarization rate (abstracts/sec.)'].append('OOM')
-
-            results.save_result()
+                    results.save_result()
 
     return True
 
@@ -190,7 +195,8 @@ def start_job(
     num_abstracts: int, 
     device: str, 
     gpu_index: int, 
-    gpu: str
+    gpu: str,
+    threads_per_CPU_worker: int
 ) -> bool:
 
     try:
@@ -202,7 +208,8 @@ def start_job(
 
         else:
             use_GPU = False
-            print(f' Job {i} starting on CPU')
+            torch.set_num_threads(threads_per_CPU_worker)
+            print(f' Job {i} starting on CPU with {threads_per_CPU_worker} threads per worker')
         
         # Fire up the model for this run
         model, tokenizer, gen_cfg = start_llm(gpu=gpu)
@@ -252,7 +259,7 @@ def start_job(
 
         print(f'{rte}')
         return False
-
+    
     # Get rid of model and tokenizer from run, free up memory
     del model
     del tokenizer
@@ -293,72 +300,3 @@ def start_llm(gpu: str) -> Tuple[
         tokenizer = transformers.AutoTokenizer.from_pretrained("haining/scientific_abstract_simplification")
 
         return model, tokenizer, gen_cfg
-
-# def summarize(abstract, model, tokenizer, gen_cfg, device_map_strategy):
-        
-#     # Prepend the prompt to this abstract and encode
-#     encoding = tokenizer(
-#         'summarize, simplify, and contextualize: ' + abstract, 
-#         max_length = 672, 
-#         padding = 'max_length', 
-#         truncation = True, 
-#         return_tensors = 'pt'
-#     )
-
-#     # Move to GPU if appropriate
-#     if 'CPU' not in device_map_strategy.split(' '):
-#         encoding = encoding.to('cuda')
-    
-#     # Generate summary
-#     decoded_ids = model.generate(
-#         input_ids = encoding['input_ids'],
-#         attention_mask = encoding['attention_mask'], 
-#         generation_config = gen_cfg
-#     )
-    
-#     # Decode summary
-#     summary = tokenizer.decode(decoded_ids[0], skip_special_tokens = True)
-
-#     return summary
-
-# def collect_result(result):
-#     # Need a dummy return here since we don't have good logging setup
-#     # this ensures that anything that a worker process sends to STDOUT
-#     # or STDERR actually shows up in the terminal
-#     return True
-
-# class Results:
-#     '''Class to hold objects and methods for
-#     collection of results'''
-
-#     def __init__(self, results_dir):
-
-#         # Output file for results
-#         self.output_file = f'{results_dir}/results.csv'
-
-#         # Independent vars for run
-#         self.data = {}
-#         self.data['replicate'] = []
-#         self.data['abstracts'] = []
-#         self.data['abstracts per worker'] = []
-#         self.data['workers'] = []
-#         self.data['device map strategy'] = []
-#         self.data['summarization time (sec.)'] = []
-#         self.data['summarization rate (abstracts/sec.)'] = []
-
-#     def save_result(self, overwrite = False):
-
-#         # Make dataframe of new results
-#         results_df = pd.DataFrame(self.data)
-
-#         # Read existing results if any and concatenate new results if desired
-#         if overwrite == False:
-#             if os.path.exists(self.output_file):
-#                 old_results_df = pd.read_csv(self.output_file)
-#                 results_df = pd.concat([old_results_df, results_df])
-
-#         else:
-#             print('Clearing any old results.')
-
-#         # Save results for run to csv
-#         results_df.to_csv(self.output_file, index = False)
