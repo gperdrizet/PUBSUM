@@ -46,7 +46,7 @@ def device_map_plot(datafile):
     data = pd.read_csv(datafile)
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
 
-    wide_data = data.pivot(index='abstract', columns='device map strategy', values='summarization rate (abstracts/min.)')
+    wide_data = data.pivot(index='replicate', columns='device map strategy', values='summarization rate (abstracts/min.)')
 
     fig, axs = plt.subplots(1, 1, figsize=(9, 3), tight_layout=True)
 
@@ -86,7 +86,7 @@ def parallel_summarization_plot(datafile):
 
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
 
-    devices = ['GPU', 'CPU']
+    devices = ['GPU', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
 
     fig, axs = plt.subplots(1, 1, figsize=(5, 5), tight_layout=True)
 
@@ -137,11 +137,12 @@ def model_quantization_plot(datafile):
     axs[0].bar(
         x=mean_memory_footprint_data.index, 
         height=mean_memory_footprint_data['model GPU memory footprint (GB)'],
-        color='black'
+        color='black',
+        fill=False
     )
 
-    rate_data = data[['abstract', 'quantization strategy', 'summarization rate (abstracts/min.)']]
-    rate_data = data.pivot(index='abstract', columns='quantization strategy', values='summarization rate (abstracts/min.)')
+    rate_data = data[['replicate', 'quantization strategy', 'summarization rate (abstracts/min.)']]
+    rate_data = data.pivot(index='replicate', columns='quantization strategy', values='summarization rate (abstracts/min.)')
 
     axs[1].set_title('Model quantization benchmark: summarization rate')
     axs[1].set_xlabel('Quantization strategy')
