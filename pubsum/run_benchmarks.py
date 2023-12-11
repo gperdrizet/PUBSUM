@@ -8,6 +8,7 @@ import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarization.benchmark as parallel
 import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarization.benchmark as parallel_batched
+from multiprocessing import Process, Queue
 
 if __name__ == "__main__":
 
@@ -51,123 +52,192 @@ if __name__ == "__main__":
     # Run the benchmarks called for by the user #
     #############################################
 
+    # Create multiprocessing queue so we can run each benchmark
+    # in it's own subprocess. This makes sure that any artifacts
+    # e.g. CUDA context die with the benchmark and don't 
+    # interfere with subsequent tests
+    queue = Queue()
+
+
     # Initial load, summarize, insert timing benchmark
     if args.baseline_execute == 'True' or args.run_all == 'True':
 
-        baseline_execute.benchmark(
-            helper_funcs=helper_funcs,
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
-            replicates=10,
-            num_abstracts=3,
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=baseline_execute.benchmark, 
+            kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
+                replicates=10,
+                num_abstracts=3,
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+
+        p.start()
+        p.join()
+
 
     # SQL insert benchmark
     if args.sql_insert == 'True' or args.run_all == 'True':
 
-        sql.benchmark(
-            helper_funcs=helper_funcs,
-            resume=args.resume,
-            master_file_list=conf.MASTER_FILE_LIST,
-            results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
-            replicates=5,
-            abstract_nums=[10000, 200000, 400000],
-            insert_strategies=[
-                'execute_many', 
-                'execute_batch', 
-                'execute_values', 
-                'mogrify', 
-                'stringIO'
-            ],
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=sql.benchmark, 
+            kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                master_file_list=conf.MASTER_FILE_LIST,
+                results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
+                replicates=5,
+                abstract_nums=[10000, 200000, 400000],
+                insert_strategies=[
+                    'execute_many', 
+                    'execute_batch', 
+                    'execute_values', 
+                    'mogrify', 
+                    'stringIO'
+                ],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+
+        p.start()
+        p.join()
+
 
     # Huggingface device map strategy for summarization benchmark
     if args.hf_device_map == 'True' or args.run_all == 'True':
 
-        device_map.benchmark(
-            helper_funcs=helper_funcs,
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
-            replicates=5,
-            num_abstracts=3,
-            device_map_strategies=[
-                'CPU only', 
-                'multi-GPU', 
-                'single GPU', 
-                'balanced', 
-                'balanced_low_0', 
-                'sequential'
-            ],
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=device_map.benchmark, 
+            kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
+                replicates=5,
+                num_abstracts=3,
+                device_map_strategies=[
+                    'CPU only', 
+                    'multi-GPU', 
+                    'single GPU', 
+                    'balanced', 
+                    'balanced_low_0', 
+                    'sequential'
+                ],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+
+        p.start()
+        p.join()
+
 
     # Model quantization benchmark
     if args.model_quantization == 'True' or args.run_all == 'True':
 
-        quantization.benchmark(
-            helper_funcs=helper_funcs,
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/model_quantization',
-            replicates=5,
-            num_abstracts=3,
-            quantization_strategies=[
-                'none',
-                'eight bit', 
-                'four bit', 
-                'four bit nf4',
-                'nested four bit',
-                'nested four bit nf4',
-                'none + BT',
-                'eight bit + BT', 
-                'four bit + BT', 
-                'four bit nf4 + BT',
-                'nested four bit + BT',
-                'nested four bit nf4 + BT',
-            ],
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=quantization.benchmark, 
+                kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/model_quantization',
+                replicates=5,
+                num_abstracts=3,
+                quantization_strategies=[
+                    'none',
+                    'eight bit', 
+                    'four bit', 
+                    'four bit nf4',
+                    'nested four bit',
+                    'nested four bit nf4',
+                    'none + BT',
+                    'eight bit + BT', 
+                    'four bit + BT', 
+                    'four bit nf4 + BT',
+                    'nested four bit + BT',
+                    'nested four bit nf4 + BT',
+                ],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+
+        p.start()
+        p.join()
+
 
     # Batched summarization benchmark
     if args.batched_summarization == 'True' or args.run_all == 'True':
 
-        batched_summarization.benchmark(
-            helper_funcs=helper_funcs,
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
-            replicates=5,
-            batches=3,
-            batch_sizes=[1, 2, 4, 8, 16, 32, 64],
-            quantization_strategies=['none', 'four bit'],
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=batched_summarization.benchmark, 
+            kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
+                replicates=5,
+                batches=3,
+                batch_sizes=[1, 2, 4, 8, 16, 32, 64],
+                quantization_strategies=['none', 'four bit'],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+
+        p.start()
+        p.join()
+
 
     # Data parallel summarization benchmark
     if args.parallel_summarization == 'True' or args.run_all == 'True':
 
-        parallel.benchmark(
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
-            replicates=5,
-            batches=3,
-            devices=['GPU', 'CPU'],
-            workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
-            gpus=conf.GPUS,
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=parallel.benchmark, 
+            kwargs=dict(
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
+                replicates=5,
+                batches=3,
+                devices=['GPU', 'CPU'],
+                workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+                gpus=conf.GPUS,
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+        
+        p.start()
+        p.join()
+
 
     # Data parallel batched summarization benchmark
     if args.parallel_batched_summarization == 'True' or args.run_all == 'True':
 
-        parallel_batched.benchmark(
-            resume=args.resume,
-            results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
-            replicates=5,
-            batches=3,
-            batch_sizes=[16, 32, 64],
-            workers=[4, 8, 12, 16, 20, 24],
-            gpus=conf.GPUS,
-            quantization_strategies=['none', 'four bit'],
-            **conf.SQL_SERVER_KWARGS
+        p = Process(target=parallel_batched.benchmark, 
+            kwargs=dict(
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
+                replicates=5,
+                batches=3,
+                batch_sizes=[16, 32, 64],
+                workers=[4, 8, 12, 16, 20, 24],
+                gpus=conf.GPUS,
+                quantization_strategies=['none', 'four bit'],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
         )
+        
+        p.start()
+        p.join()
