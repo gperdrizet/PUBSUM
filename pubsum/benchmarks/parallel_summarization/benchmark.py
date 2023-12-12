@@ -81,6 +81,14 @@ def benchmark(
                 # Unpack parameters from set
                 device, workers, replicate = parameter_set
 
+                # If this is a CPU run, extract the number of threads per worker
+                if device != 'GPU':
+                    threads_per_CPU_worker = int(device.split(' ')[1])
+
+                # If its a GPU run, set threads per CPU worker to none
+                elif device == 'GPU':
+                    threads_per_CPU_worker = None
+
                 # Calculate total abstracts needed for job
                 num_abstracts = batches * workers
 
@@ -92,140 +100,142 @@ def benchmark(
                 print(f' Batches: {batches}')
                 print(f' Abstracts: {num_abstracts}\n')
 
-                # Instantiate results object for this run
-                results = helper_funcs.Results(
-                    results_dir=results_dir,
-                    collection_vars=collection_vars
-                )
+                # If this is a CPU run and it's calling for more threads than we have, skip it
+                if device != 'GPU' and mp.cpu_count() < workers * threads_per_CPU_worker:
+                    print(f' Run will use more worker threads than total threads, skipping')
 
-                # Collect data for run parameters
-                results.data['replicate'].append(replicate)
-                results.data['abstracts per worker'].append(num_abstracts // workers)
-                results.data['abstracts'].append(num_abstracts)
-                results.data['batches'].append(batches)
-                results.data['workers'].append(workers)
-                results.data['device'].append(device)
-
-                # Then, check to see if this parameter set has caused an
-                # out of memory crash on a previous replicate, if it has
-                # skip it and add OOM flag to results directly. To do this
-                # we need to omit the replicate number and compare only on
-                # quantization, workers and batch size
-                if parameter_set[:-1] in oom_parameter_sets:
-
-                    print(' Skipping parameter set due to prior OOMs.')
-
-                    results.data['summarization time (sec.)'].append('OOM')
-                    results.data['summarization rate (abstracts/sec.)'].append('OOM')
-                    results.data['max memory allocated (bytes)'].append('OOM')
-                    results.data['model memory footprint (bytes)'].append('OOM')
-
-                # If we have not crashed on this parameter set before, do the run
                 else:
 
-                    # If this is a GPU run, start a counter to pick GPUs for jobs
-                    if device == 'GPU':
-                        gpu_index = 0
-                        threads_per_CPU_worker = None
+                    # Instantiate results object for this run
+                    results = helper_funcs.Results(
+                        results_dir=results_dir,
+                        collection_vars=collection_vars
+                    )
 
-                    # If this run is not using GPU(s), pass none for GPU related parameters,
-                    # and get the number of CPU threads per worker called for
+                    # Collect data for run parameters
+                    results.data['replicate'].append(replicate)
+                    results.data['abstracts per worker'].append(num_abstracts // workers)
+                    results.data['abstracts'].append(num_abstracts)
+                    results.data['batches'].append(batches)
+                    results.data['workers'].append(workers)
+                    results.data['device'].append(device)
+
+                    # Then, check to see if this parameter set has caused an
+                    # out of memory crash on a previous replicate, if it has
+                    # skip it and add OOM flag to results directly. To do this
+                    # we need to omit the replicate number and compare only on
+                    # quantization, workers and batch size
+                    if parameter_set[:-1] in oom_parameter_sets:
+
+                        print(' Skipping parameter set due to prior OOMs.')
+
+                        results.data['summarization time (sec.)'].append('OOM')
+                        results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                        results.data['model memory footprint (bytes)'].append('OOM')
+                        results.data['max memory allocated (bytes)'].append('OOM')
+
+                    # If we have not crashed on this parameter set before, do the run
                     else:
-                        gpu_index = None
-                        gpu = None
-                        threads_per_CPU_worker = int(device.split(' ')[1])
 
-                    # Don't do the run if total CPU threads required is more than available
-                    if device == 'GPU' or mp.cpu_count() // workers >= threads_per_CPU_worker:
+                        # If this is a GPU run, start a counter to pick GPUs for jobs
+                        if device == 'GPU':
+                            gpu_index = 0
 
-                        # Instantiate pool with one member for each job we need to run
-                        pool = mp.Pool(
-                            processes = workers,
-                            maxtasksperchild = 1
-                        )
+                        # If this run is not using GPU(s), pass none for GPU related parameters,
+                        # and get the number of CPU threads per worker called for.
+                        else:
+                            gpu_index = None
+                            gpu = None
 
-                        # Start timer
-                        start = time.time()
+                        # Don't do the run if total CPU threads required is more than available
+                        if device == 'GPU' or mp.cpu_count() // workers >= threads_per_CPU_worker:
 
-                        # Holder for returns from workers
-                        async_results = []
-
-                        # Loop on jobs for this run
-                        for i in list(range(0, workers)):
-
-                            # Pick GPU for run, if needed
-                            if device == 'GPU':
-                                gpu = gpus[gpu_index]
-
-                            async_results.append(
-                                pool.apply_async(start_job,
-                                    args = (
-                                        i, 
-                                        db_name, 
-                                        user, 
-                                        passwd, 
-                                        host, 
-                                        batches, 
-                                        num_abstracts, 
-                                        device, 
-                                        gpu_index, 
-                                        gpu,
-                                        threads_per_CPU_worker
-                                    )
-                                )
+                            # Instantiate pool with one member for each job we need to run
+                            pool = mp.Pool(
+                                processes = workers,
+                                maxtasksperchild = 1
                             )
 
-                            # Increment GPU index if needed - we have four GPUs, so when the index gets 
-                            # to 3 (0 anchored), reset it back to 0, otherwise increment it.
-                            if device == 'GPU':
-                                if gpu_index == 3:
-                                    gpu_index = 0
+                            # Start timer
+                            start = time.time()
+
+                            # Holder for returns from workers
+                            async_results = []
+
+                            # Loop on jobs for this run
+                            for i in list(range(0, workers)):
+
+                                # Pick GPU for run, if needed
+                                if device == 'GPU':
+                                    gpu = gpus[gpu_index]
+
+                                async_results.append(
+                                    pool.apply_async(start_job,
+                                        args = (
+                                            i, 
+                                            db_name, 
+                                            user, 
+                                            passwd, 
+                                            host, 
+                                            batches, 
+                                            num_abstracts, 
+                                            device, 
+                                            gpu_index, 
+                                            gpu,
+                                            threads_per_CPU_worker
+                                        )
+                                    )
+                                )
+
+                                # Increment GPU index if needed - we have four GPUs, so when the index gets 
+                                # to 3 (0 anchored), reset it back to 0, otherwise increment it.
+                                if device == 'GPU':
+                                    if gpu_index == 3:
+                                        gpu_index = 0
+                                    
+                                    else:
+                                        gpu_index += 1
+
+                            # Clean up
+                            pool.close()
+                            pool.join()
+
+                            # Stop the timer
+                            dT = time.time() - start
                                 
-                                else:
-                                    gpu_index += 1
+                            # Get the results
+                            result = [async_result.get() for async_result in async_results]
 
-                        # Clean up
-                        pool.close()
-                        pool.join()
+                            # Get model and max memory footprint across workers
+                            total_max_memory = 0
+                            total_model_footprint = 0
 
-                        # Stop the timer
-                        dT = time.time() - start
+                            for worker_result in result:
+                                total_max_memory += worker_result[1]
+                                total_model_footprint += worker_result[2]
 
-                        # Get the results
-                        result = [async_result.get() for async_result in async_results]
+                            print(f'\n Worker returns: {result}')
+                            print(f' Total max memory: {round(total_max_memory / (1024**3), 2)}')
+                            print(f' Total model memory footprint: {round(total_model_footprint / (1024**3), 2)}')
 
-                        # Get model and max memory footprint across workers
-                        run_total_max_memory = 0
-                        run_total_model_footprint = 0
+                            # Collect and save timing and memory data, if we returned an OOM error, mark it in the results
+                            # and save the parameter set that caused the crash
+                            if False not in sum(list(result), []):
+                                
+                                results.data['summarization time (sec.)'].append(dT)
+                                results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
+                                results.data['model memory footprint (bytes)'].append(total_model_footprint)
+                                results.data['max memory allocated (bytes)'].append(total_max_memory)
 
-                        for worker_result in result:
-                            run_total_max_memory += worker_result[1]
-                            run_total_model_footprint += worker_result[2]
+                            else:
+                                results.data['summarization time (sec.)'].append('OOM')
+                                results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                                results.data['model memory footprint (bytes)'].append('OOM')
+                                results.data['max memory allocated (bytes)'].append('OOM')
 
-                        print(f'\n Worker returns: {result}')
-                        print(f' Max memory: {run_total_max_memory}')
-                        print(f' Total model memory footprint: {run_total_model_footprint}')
-
-                        # Collect and save timing and memory data, if we returned an OOM error, mark it in the results
-                        # and save the parameter set that caused the crash
-                        if False not in sum(list(result), []):
+                                oom_parameter_sets.append((device, workers))
                             
-                            results.data['summarization time (sec.)'].append(dT)
-                            results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
-                            results.data['max memory allocated (bytes)'].append(run_total_max_memory)
-                            results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
-
-                        else:
-                            results.data['summarization time (sec.)'].append('OOM')
-                            results.data['summarization rate (abstracts/sec.)'].append('OOM')
-                            results.data['max memory allocated (bytes)'].append('OOM')
-                            results.data['model memory footprint (bytes)'].append('OOM')
-
-                            oom_parameter_sets.append((device, workers))
-
-                        time.sleep(30)
-                        
-                results.save_result()
+                    results.save_result()
 
     return True
 
@@ -249,6 +259,7 @@ def start_job(
         if device == 'GPU':
             use_GPU = True
             torch.cuda.set_device(gpu_index)
+
             print(f' Job {i} starting on {gpu}')
 
         # If this is not a GPU run, assign CPU threads
@@ -257,7 +268,7 @@ def start_job(
             use_GPU = False
             torch.set_num_threads(threads_per_CPU_worker)
             tracemalloc.start()
-            tracemalloc.clear_traces()
+
             print(f' Job {i} starting on CPU with {threads_per_CPU_worker} threads per worker')
         
         # Fire up the model for this run
@@ -317,7 +328,6 @@ def start_job(
         memory, max_memory = tracemalloc.get_traced_memory()
         max_memory = max_memory * 1024
         tracemalloc.stop()
-
 
     model_memory = model.get_memory_footprint()
 
