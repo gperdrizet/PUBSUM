@@ -35,7 +35,7 @@ def benchmark(
         'workers per GPU',
         'quantization',
         'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)'
+        'summarization rate (abstracts/sec.)',
         'max memory allocated (bytes)',
         'model memory footprint (bytes)'
     ]
