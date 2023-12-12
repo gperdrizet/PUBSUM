@@ -1,11 +1,9 @@
-import os
 import gc
-import pandas as pd
-import psycopg2
 import time
 import torch
 import itertools
 import multiprocessing as mp
+import numpy as np
 from typing import Tuple, List
 from .. import helper_functions as helper_funcs
 import transformers
@@ -35,7 +33,9 @@ def benchmark(
         'device',
         'workers',
         'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)'
+        'summarization rate (abstracts/sec.)',
+        'max memory allocated (bytes)',
+        'model memory footprint (bytes)'
     ]
 
     # Subset of collection vars which are sufficient to uniquely identify each run
@@ -103,6 +103,7 @@ def benchmark(
                 # If this is a GPU run, start a counter to pick GPUs for jobs
                 if device == 'GPU':
                     gpu_index = 0
+                    threads_per_CPU_worker = None
 
                 # If this run is not using GPU(s), pass none for GPU related parameters,
                 # and get the number of CPU threads per worker called for
@@ -169,16 +170,31 @@ def benchmark(
 
                     # Get the results
                     result = [async_result.get() for async_result in async_results]
-                    print(f'\n Workers succeeded: {result}')
+                    #print(f'\n Workers succeeded: {result}')
+
+                    run_total_max_memory = 0
+                    run_total_model_footprint = 0
+
+                    for worker_result in result:
+                        run_total_max_memory += worker_result[1]
+                        run_total_model_footprint += worker_result[2]
+
+                    print(f'\n Worker returns: {result}')
+                    print(f' Max memory: {run_total_max_memory}')
+                    print(f' Total model memory footprint: {run_total_model_footprint}')
 
                     # Collect and save data, if we returned an OOM error, mark it in the results
-                    if False not in result:
+                    if False not in sum(list(result), []):
                         results.data['summarization time (sec.)'].append(dT)
                         results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
+                        results.data['max memory allocated (bytes)'].append(run_total_max_memory)
+                        results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
 
                     else:
                         results.data['summarization time (sec.)'].append('OOM')
                         results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                        results.data['max memory allocated (bytes)'].append('OOM')
+                        results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
 
                     results.save_result()
 
@@ -197,7 +213,7 @@ def start_job(
     gpu_index: int, 
     gpu: str,
     threads_per_CPU_worker: int
-) -> bool:
+) -> List:
 
     try:
         # Assign job to GPU if needed
@@ -225,18 +241,18 @@ def start_job(
 
         batch_count = 0
 
-        for i in range(batches):
+        for n in range(batches):
 
             batch_count += 1
 
             if use_GPU == True:
-                print(f' {gpu} summarizing batch {batch_count}.')
+                print(f' {gpu} job {i}: summarizing batch {batch_count} of {batches}.')
                 
             else:
-                print(f' CPU summarizing batch {batch_count}')
+                print(f' CPU job {i} summarizing batch {batch_count} of {batches}')
 
             # Get the batch
-            batch = rows[i:(i+1)]
+            batch = rows[n:(n+1)]
 
             # Get abstract texts for this batch
             abstracts = [row[1] for row in batch]
@@ -253,22 +269,26 @@ def start_job(
     except torch.cuda.OutOfMemoryError as oom:
 
         print(f'{oom}')
-        return False
+        return [False, np.nan, np.nan]
 
     except RuntimeError as rte:
 
         print(f'{rte}')
-        return False
+        return [False, np.nan, np.nan]
     
+    # Get max and model memory footprints
+    max_memory = torch.cuda.max_memory_allocated()
+    model_memory = model.get_memory_footprint()
+
     # Get rid of model and tokenizer from run, free up memory
     del model
     del tokenizer
     gc.collect()
     torch.cuda.empty_cache()
 
-    print(f' Job {1}: done.')
+    print(f' Job {i}: done.')
 
-    return True
+    return [True, max_memory, model_memory]
 
 
 def start_llm(gpu: str) -> Tuple[
