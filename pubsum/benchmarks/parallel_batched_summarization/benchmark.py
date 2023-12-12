@@ -4,6 +4,7 @@ import time
 import torch
 import itertools
 import multiprocessing as mp
+import numpy as np
 from .. import helper_functions as helper_funcs
 import transformers
 
@@ -35,6 +36,8 @@ def benchmark(
         'quantization',
         'summarization time (sec.)',
         'summarization rate (abstracts/sec.)'
+        'max memory allocated (bytes)',
+        'model memory footprint (bytes)'
     ]
 
     # Subset of collection vars which are sufficient to uniquely identify each run
@@ -118,7 +121,9 @@ def benchmark(
 
                     results.data['summarization time (sec.)'].append('OOM')
                     results.data['summarization rate (abstracts/sec.)'].append('OOM')
-
+                    results.data['max memory allocated (bytes)'].append('OOM')
+                    results.data['model memory footprint (bytes)'].append('OOM')
+                
                 # If we have not crashed on this parameter set before, do the run
                 else:
 
@@ -178,17 +183,33 @@ def benchmark(
 
                     # Get the results
                     result = [async_result.get() for async_result in async_results]
-                    print(f'\n Workers succeeded: {result}')
+                    
+                    # Get model and max memory footprint across workers
+                    run_total_max_memory = 0
+                    run_total_model_footprint = 0
 
-                    # Collect and save timing data, if we returned an OOM error, mark it in the results
+                    for worker_result in result:
+                        run_total_max_memory += worker_result[1]
+                        run_total_model_footprint += worker_result[2]
+
+                    print(f'\n Worker returns: {result}')
+                    print(f' Max memory: {run_total_max_memory}')
+                    print(f' Total model memory footprint: {run_total_model_footprint}')
+
+                    # Collect and save timing and memory data, if we returned an OOM error, mark it in the results
                     # and save the parameter set that caused the crash
-                    if False not in result:
+                    if False not in sum(list(result), []):
+                        
                         results.data['summarization time (sec.)'].append(dT)
                         results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
-
+                        results.data['max memory allocated (bytes)'].append(run_total_max_memory)
+                        results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
                     else:
                         results.data['summarization time (sec.)'].append('OOM')
                         results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                        results.data['max memory allocated (bytes)'].append('OOM')
+                        results.data['model memory footprint (bytes)'].append('OOM')
+
                         oom_parameter_sets.append((quantization, workers, batch_size))
 
                 results.save_result()
@@ -257,12 +278,16 @@ def start_job(
     except torch.cuda.OutOfMemoryError as oom:
 
         print(f'{oom}')
-        return False
+        return [False, np.nan, np.nan]
 
     except RuntimeError as rte:
 
         print(f'{rte}')
-        return False
+        return [False, np.nan, np.nan]
+    
+    # Get max and model memory footprints
+    max_memory = torch.cuda.max_memory_allocated()
+    model_memory = model.get_memory_footprint()
 
     # Get rid of model and tokenizer from run, free up memory
     del model
@@ -270,9 +295,9 @@ def start_job(
     gc.collect()
     torch.cuda.empty_cache()
 
-    print(f' Job {1}: done.')
+    print(f' Job {i}: done.')
 
-    return True
+    return [True, max_memory, model_memory]
 
 def start_llm(
     gpu: str, 
