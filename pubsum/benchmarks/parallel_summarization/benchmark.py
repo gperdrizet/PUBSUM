@@ -2,6 +2,7 @@ import gc
 import time
 import torch
 import itertools
+import tracemalloc
 import multiprocessing as mp
 import numpy as np
 from typing import Tuple, List
@@ -221,8 +222,10 @@ def benchmark(
                             results.data['model memory footprint (bytes)'].append('OOM')
 
                             oom_parameter_sets.append((device, workers))
+
+                        time.sleep(30)
                         
-                    results.save_result()
+                results.save_result()
 
     return True
 
@@ -248,9 +251,13 @@ def start_job(
             torch.cuda.set_device(gpu_index)
             print(f' Job {i} starting on {gpu}')
 
+        # If this is not a GPU run, assign CPU threads
+        # and start tracemalloc to monitor system memory
         else:
             use_GPU = False
             torch.set_num_threads(threads_per_CPU_worker)
+            tracemalloc.start()
+            tracemalloc.clear_traces()
             print(f' Job {i} starting on CPU with {threads_per_CPU_worker} threads per worker')
         
         # Fire up the model for this run
@@ -302,8 +309,16 @@ def start_job(
         print(f'{rte}')
         return [False, np.nan, np.nan]
     
-    # Get max and model memory footprints
-    max_memory = torch.cuda.max_memory_allocated()
+    # Get peak memory for GPU or system for non-GPU jobs
+    if device == 'GPU':
+        max_memory = torch.cuda.max_memory_allocated()
+
+    else:
+        memory, max_memory = tracemalloc.get_traced_memory()
+        max_memory = max_memory * 1024
+        tracemalloc.stop()
+
+
     model_memory = model.get_memory_footprint()
 
     # Get rid of model and tokenizer from run, free up memory
