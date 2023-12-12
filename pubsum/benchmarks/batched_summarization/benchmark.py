@@ -118,7 +118,7 @@ def benchmark(
                     for i in range(batches):
 
                         batch_count += 1
-                        print(f' Summarizing batch {batch_count} of {num_abstracts // batch_size}.')
+                        print(f' Summarizing batch {batch_count} of {batches}.')
 
                         # Get the batch
                         batch = rows[i*batch_size:(i+1)*batch_size]
