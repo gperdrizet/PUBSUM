@@ -2,8 +2,9 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import notebook_helper_functions.data_analysis_functions as data_funcs
 from matplotlib.ticker import FormatStrFormatter
-from typing import List, Union, Tuple
+from typing import List, Union
 
 pd.options.mode.chained_assignment = None
 
@@ -243,7 +244,7 @@ def batch_summarization_plot(
     data = pd.read_csv(datafile)
 
     # Clean out-of-memory errors and replace with user defined value
-    data = clean_out_of_memory_errors(
+    data = data_funcs.clean_out_of_memory_errors(
         data=data, 
         unique_condition_columns=unique_condition_columns,
         oom_columns=oom_columns, 
