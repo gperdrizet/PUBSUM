@@ -1,4 +1,4 @@
-abstracts,replicate,batches,batch size,quantization,summarization time (sec.),summarization rate (abstracts/sec.),model GPU memory footprint (bytes),max memory allocated (bytes)
+abstracts,replicate,batches,batch size,quantization,summarization time (sec.),summarization rate (abstracts/sec.),model memory footprint (bytes),max memory allocated (bytes)
 3,1,3,1,none,31.23176741600037,0.0960560431960398,3132600320,3486147072
 3,2,3,1,none,36.369606256484985,0.0824864580288129,3132600320,3495322112
 3,3,3,1,none,32.94704532623291,0.091055206022112,3132600320,3507513344

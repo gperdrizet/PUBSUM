@@ -185,50 +185,6 @@ def model_quantization_plot(datafile):
 
     return data, plt
 
-def clean_out_of_memory_errors(
-    data: pd.DataFrame, 
-    unique_condition_columns: List[str],
-    oom_columns: List[str], 
-    str_columns: List[str], 
-    int_columns: List[str], 
-    float_columns: List[str],
-    oom_replacement_val: Union[str, int, float]
-) -> pd.DataFrame:
-
-    # Pick a colum that could/does contain OOMs and make sure it's string
-    data[oom_columns[0]] = data[oom_columns[0]].astype(str)
-
-    # Get rows from the dataframe where that column is OOM
-    oom = data[data[oom_columns[0]] == 'OOM']
-
-    # Then grab the just the columns which uniquely specify the condition which
-    # caused the out-of-memory error, excluding things like replicate, abstract
-    # number etc. and make it a list
-    oom = oom[unique_condition_columns]
-    oom_conditions = oom.to_numpy().tolist()
-
-    # Loop on data columns which will contain the 'OOM' error string
-    for oom_column in oom_columns:
-
-        # Loop on the set(s) of conditions which caused the OOM
-        for condition in oom_conditions:
-
-            # Mask and replace values in rows which contain OOM error string
-            data[oom_column].loc[
-                (data[unique_condition_columns] == condition).all(1)
-            ] = oom_replacement_val
-
-    # Fix dtypes
-    for column in str_columns:
-        data[column] = data[column].astype(str)
-    
-    for column in int_columns:
-        data[column] = data[column].astype(int)
-
-    for column in float_columns:
-        data[column] = data[column].astype(float)
-
-    return data
 
 def batch_summarization_plot(
     datafile: str,
@@ -254,13 +210,18 @@ def batch_summarization_plot(
         oom_replacement_val=oom_replacement_val
     )
 
+    data.dropna(axis=0, inplace=True)
+
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
 
     max_memory = math.ceil(max(data['max memory allocated (GB)']))
     max_rate = math.ceil(max(data['summarization rate (abstracts/min.)']))
+    min_rate = math.floor(min(data['summarization rate (abstracts/min.)']))
 
-    fig, axs = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)
+    print(f'Rate axis limits: {min_rate}, {max_rate}')
+
+    fig, axs = plt.subplots(2, 2, figsize=(9, 9), tight_layout=True)
 
     unquantized_data = data[data['quantization'] == 'none']
 
@@ -292,8 +253,9 @@ def batch_summarization_plot(
     axs[1, 0].set_title('Summarization rate: un-quantized model')
     axs[1, 0].set_xlabel('Batch size')
     axs[1, 0].set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs[1, 0].annotate('OOM', xy=(6.1, 23), color='black')
-    axs[1, 0].set_ylim([0, max_rate])
+    #axs[1, 0].annotate('OOM', xy=(6.1, 23), color='black')
+    #axs[1, 0].set_xlim([])
+    axs[1, 0].set_ylim([min_rate, max_rate])
     axs[1, 0].boxplot(
         rate_data, 
         labels=rate_data.columns, 
@@ -329,14 +291,12 @@ def batch_summarization_plot(
     axs[1, 1].set_title('Summarization rate: quantized model')
     axs[1, 1].set_xlabel('Batch size')
     axs[1, 1].set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs[1, 1].set_ylim([0, max_rate])
+    axs[1, 1].set_ylim([min_rate, max_rate])
     axs[1, 1].boxplot(
         rate_data, 
         labels=rate_data.columns, 
         medianprops=dict(color='red')
     )
-
-    print(f'Plot is type: {type(plt)}')
 
     return data, plt
 

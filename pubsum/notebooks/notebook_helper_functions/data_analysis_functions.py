@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import List, Union
 
 def clean_out_of_memory_errors(
@@ -39,7 +40,7 @@ def clean_out_of_memory_errors(
         data[column] = data[column].astype(str)
     
     for column in int_columns:
-        data[column] = data[column].astype(int)
+        data[column] = data[column].astype('Int64')
 
     for column in float_columns:
         data[column] = data[column].astype(float)
