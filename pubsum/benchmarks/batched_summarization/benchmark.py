@@ -31,7 +31,7 @@ def benchmark(
         'quantization',
         'summarization time (sec.)',
         'summarization rate (abstracts/sec.)',
-        'model GPU memory footprint (bytes)',
+        'model memory footprint (bytes)',
         'max memory allocated (bytes)'
     ]
 
@@ -58,6 +58,10 @@ def benchmark(
         batch_sizes,
         replicate_numbers
     )
+
+    # List to hold parameter sets that cause out-of-memory crashes
+    # (device, workers) - replicate number omitted
+    oom_parameter_sets = []
 
     if len(quantization_strategies) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
         print('Run is complete')
@@ -96,74 +100,95 @@ def benchmark(
                 results.data['batches'].append(batches)
                 results.data['batch size'].append(batch_size)
 
-                # Fence to catch out of memory errors
-                try:
-                    # Fire up the model for this run
-                    model, tokenizer, gen_cfg = start_llm(quantization=quantization)
-                    model_memory_footprint = model.get_memory_footprint()
+                # Then, check to see if this parameter set has caused an
+                # out of memory crash on a previous replicate, if it has
+                # skip it and add OOM flag to results directly. To do this
+                # we need to omit the replicate number and compare only on
+                # quantization, workers and batch size
+                if parameter_set[:-1] in oom_parameter_sets:
 
-                    # Get enough rows to batch from abstracts table
-                    rows = helper_funcs.get_rows(
-                        db_name=db_name, 
-                        user=user, 
-                        passwd=passwd, 
-                        host=host, 
-                        num_abstracts=num_abstracts
-                    )
+                    print(' Skipping parameter set due to prior OOMs.')
 
-                    # Start the batch loop
-                    batch_count = 0
-                    summarization_start = time.time()
-
-                    for i in range(batches):
-
-                        batch_count += 1
-                        print(f' Summarizing batch {batch_count} of {batches}.')
-
-                        # Get the batch
-                        batch = rows[i*batch_size:(i+1)*batch_size]
-
-                        # Get abstract texts for this batch
-                        abstracts = [row[1] for row in batch]
-
-                        # Do the summary
-                        summaries = helper_funcs.summarize(
-                            abstracts=abstracts,
-                            model=model,
-                            tokenizer=tokenizer, 
-                            gen_cfg=gen_cfg,
-                            use_GPU=True
-                        )
-
-                    # Stop the clock
-                    dT = time.time() - summarization_start
-
-                    # Get max memory used and reset
-                    max_memory = torch.cuda.max_memory_allocated()
-                    torch.cuda.empty_cache()
-                    torch.cuda.reset_peak_memory_stats()
-
-                    # Collect run results
-                    results.data['model GPU memory footprint (bytes)'].append(model_memory_footprint)
-                    results.data['max memory allocated (bytes)'].append(max_memory)
-                    results.data['summarization time (sec.)'].append(dT)
-                    results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
-
-                # Catch out of memory errors
-                except torch.cuda.OutOfMemoryError as oom:
-                    print(f'\n {oom}\n')
-
-                    # Since we failed on OOM, mark it in results
-                    results.data['model GPU memory footprint (bytes)'].append('OOM')
-                    results.data['max memory allocated (bytes)'].append('OOM')
                     results.data['summarization time (sec.)'].append('OOM')
                     results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                    results.data['model memory footprint (bytes)'].append('OOM')
+                    results.data['max memory allocated (bytes)'].append('OOM')
 
-                # Get rid of model and tokenizer from run, free up memory
-                del model
-                del tokenizer
-                gc.collect()
-                torch.cuda.empty_cache()
+                # If we have not crashed on this parameter set before, do the run
+                else:
+
+                    # Fence to catch out of memory errors
+                    try:
+                        # Fire up the model for this run
+                        model, tokenizer, gen_cfg = start_llm(quantization=quantization)
+                        model_memory_footprint = model.get_memory_footprint()
+
+                        # Get enough rows to batch from abstracts table
+                        rows = helper_funcs.get_rows(
+                            db_name=db_name, 
+                            user=user, 
+                            passwd=passwd, 
+                            host=host, 
+                            num_abstracts=num_abstracts
+                        )
+
+                        # Start the batch loop
+                        batch_count = 0
+                        summarization_start = time.time()
+
+                        for i in range(batches):
+
+                            batch_count += 1
+                            print(f' Summarizing batch {batch_count} of {batches}.')
+
+                            # Get the batch
+                            batch = rows[i*batch_size:(i+1)*batch_size]
+
+                            # Get abstract texts for this batch
+                            abstracts = [row[1] for row in batch]
+
+                            # Do the summary
+                            summaries = helper_funcs.summarize(
+                                abstracts=abstracts,
+                                model=model,
+                                tokenizer=tokenizer, 
+                                gen_cfg=gen_cfg,
+                                use_GPU=True
+                            )
+
+                        # Stop the clock
+                        dT = time.time() - summarization_start
+
+                        # Get max memory
+                        max_memory = torch.cuda.max_memory_allocated()
+
+                        # Collect run results
+                        results.data['model memory footprint (bytes)'].append(model_memory_footprint)
+                        results.data['max memory allocated (bytes)'].append(max_memory)
+                        results.data['summarization time (sec.)'].append(dT)
+                        results.data['summarization rate (abstracts/sec.)'].append(num_abstracts/dT)
+
+                    # Catch out of memory errors
+                    except torch.cuda.OutOfMemoryError as oom:
+                        print(f'\n {oom}\n')
+
+                        # Since we failed on OOM, mark it in results
+                        results.data['model memory footprint (bytes)'].append('OOM')
+                        results.data['max memory allocated (bytes)'].append('OOM')
+                        results.data['summarization time (sec.)'].append('OOM')
+                        results.data['summarization rate (abstracts/sec.)'].append('OOM')
+
+                        # Then save the parameters that caused the OOM
+                        oom_parameter_sets.append((quantization, batch_size))
+
+                    # Get rid of model and tokenizer from run
+                    del model
+                    del tokenizer
+
+                    # Free up memory
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
 
                 # Save the result
                 results.save_result()
