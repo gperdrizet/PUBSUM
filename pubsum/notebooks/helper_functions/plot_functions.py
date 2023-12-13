@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+from typing import List, Union, Tuple
 
 pd.options.mode.chained_assignment = None
 
@@ -64,7 +65,9 @@ def parallel_summarization_plot(datafile):
 
     OOM_columns = [
         'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)'
+        'summarization rate (abstracts/sec.)',
+        'max memory allocated (bytes)',
+        'model memory footprint (bytes)'
     ]
 
     OOM = data[data['summarization time (sec.)'] == 'OOM']
@@ -83,18 +86,22 @@ def parallel_summarization_plot(datafile):
 
     data['summarization time (sec.)'] = data['summarization time (sec.)'].astype(float)
     data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(float)
+    data['max memory allocated (bytes)'] = data['max memory allocated (bytes)'].astype(int)
+    data['model memory footprint (bytes)'] = data['model memory footprint (bytes)'].astype(int)
 
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
+    data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
+    data['model memory footprint (GB)'] = data['model memory footprint (bytes)'] / 10 ** 9
 
     devices = ['GPU', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
 
-    fig, axs = plt.subplots(1, 1, figsize=(5, 5), tight_layout=True)
+    fig, axs = plt.subplots(1, 2, figsize=(11, 5), tight_layout=True)
 
-    axs.set_title('Data parallel summarization benchmark')
-    axs.set_xlabel('Concurrent worker processes')
-    axs.set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs.set_yscale('log', base=2)
-    axs.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    axs[0].set_title('Summarization rate')
+    axs[0].set_xlabel('Concurrent worker processes')
+    axs[0].set_ylabel('Summarization rate\n(abstracts/minute)')
+    axs[0].set_yscale('log', base=2)
+    axs[0].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
 
@@ -106,10 +113,35 @@ def parallel_summarization_plot(datafile):
         std = plot_data.groupby(['device', 'workers']).std()
         std.reset_index(inplace=True)
 
-        axs.errorbar(
+        axs[0].errorbar(
             mean['workers'], 
             mean['summarization rate (abstracts/min.)'], 
             yerr=std['summarization rate (abstracts/min.)'],
+            capsize=5,
+            label=device,
+            linestyle='dotted'
+        )
+
+    axs[1].set_title('Memory use')
+    axs[1].set_xlabel('Concurrent worker processes')
+    axs[1].set_ylabel('Total max memory allocated\n(GB)')
+    axs[1].set_yscale('log', base=2)
+    axs[1].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+
+    for device in devices:
+
+        plot_data = data[data['device'] == device]
+
+        mean = plot_data.groupby(['device', 'workers']).mean()
+        mean.reset_index(inplace=True)
+        
+        std = plot_data.groupby(['device', 'workers']).std()
+        std.reset_index(inplace=True)
+
+        axs[1].errorbar(
+            mean['workers'], 
+            mean['max memory allocated (GB)'], 
+            yerr=std['max memory allocated (GB)'],
             capsize=5,
             label=device,
             linestyle='dotted'
@@ -152,36 +184,74 @@ def model_quantization_plot(datafile):
 
     return data, plt
 
+def clean_out_of_memory_errors(
+    data: pd.DataFrame, 
+    unique_condition_columns: List[str],
+    oom_columns: List[str], 
+    str_columns: List[str], 
+    int_columns: List[str], 
+    float_columns: List[str],
+    oom_replacement_val: Union[str, int, float]
+) -> pd.DataFrame:
 
-def batch_summarization_plot(datafile):
+    # Pick a colum that could/does contain OOMs and make sure it's string
+    data[oom_columns[0]] = data[oom_columns[0]].astype(str)
 
+    # Get rows from the dataframe where that column is OOM
+    oom = data[data[oom_columns[0]] == 'OOM']
+
+    # Then grab the just the columns which uniquely specify the condition which
+    # caused the out-of-memory error, excluding things like replicate, abstract
+    # number etc. and make it a list
+    oom = oom[unique_condition_columns]
+    oom_conditions = oom.to_numpy().tolist()
+
+    # Loop on data columns which will contain the 'OOM' error string
+    for oom_column in oom_columns:
+
+        # Loop on the set(s) of conditions which caused the OOM
+        for condition in oom_conditions:
+
+            # Mask and replace values in rows which contain OOM error string
+            data[oom_column].loc[
+                (data[unique_condition_columns] == condition).all(1)
+            ] = oom_replacement_val
+
+    # Fix dtypes
+    for column in str_columns:
+        data[column] = data[column].astype(str)
+    
+    for column in int_columns:
+        data[column] = data[column].astype(int)
+
+    for column in float_columns:
+        data[column] = data[column].astype(float)
+
+    return data
+
+def batch_summarization_plot(
+    datafile: str,
+    unique_condition_columns: List[str],
+    oom_columns: List[str], 
+    str_columns: List[str], 
+    int_columns: List[str], 
+    float_columns: List[str],
+    oom_replacement_val: Union[str, int, float]
+):
+
+    # Read data
     data = pd.read_csv(datafile)
-    data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(str)
 
-    OOM_columns = [
-        'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)',
-        'model GPU memory footprint (bytes)',
-        'max memory allocated (bytes)'
-    ]
-
-    OOM = data[data['summarization time (sec.)'] == 'OOM']
-    OOM = OOM[['batch size', 'quantization']]
-    OOM_conditions = OOM.to_numpy().tolist()
-
-    for OOM_column in OOM_columns:
-        for condition in OOM_conditions:
-
-            data[OOM_column].loc[
-                (data['batch size'] == condition[0]) &
-                (data['quantization'] == condition[1])
-            ] = -1
-
-    data['quantization'] = data['quantization'].astype(str)
-    data['summarization time (sec.)'] = data['summarization time (sec.)'].astype(float)
-    data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(float)
-    data['model GPU memory footprint (bytes)'] = data['model GPU memory footprint (bytes)'].astype(int)
-    data['max memory allocated (bytes)'] = data['max memory allocated (bytes)'].astype(int)
+    # Clean out-of-memory errors and replace with user defined value
+    data = clean_out_of_memory_errors(
+        data=data, 
+        unique_condition_columns=unique_condition_columns,
+        oom_columns=oom_columns, 
+        str_columns=str_columns, 
+        int_columns=int_columns, 
+        float_columns=float_columns,
+        oom_replacement_val=oom_replacement_val
+    )
 
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
@@ -201,7 +271,7 @@ def batch_summarization_plot(datafile):
     axs[0, 0].set_ylabel('GPU memory (GB)')
     axs[0, 0].set_xlim([-0.95, 7])
     axs[0, 0].set_ylim([0, 12])
-    axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='c')
+    axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='red')
     axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=7, linewidth=1, color='y')
     #axs[0, 0].annotate('Model\nFootprint', xy=(-0.9, 4), color='red')
     #axs[0, 0].annotate('OOM', xy=(5.1, 1), color='black')
@@ -239,7 +309,7 @@ def batch_summarization_plot(datafile):
     axs[0, 1].set_ylabel('GPU memory (GB)')
     axs[0, 1].set_xlim([-0.95, 7])
     axs[0, 1].set_ylim([0, 12])
-    axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='c')
+    axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='red')
     axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=7, linewidth=1, color='y')
     #axs[0, 1].annotate('Model\nFootprint', xy=(-0.9, 1.5), color='red')
     axs[0, 1].bar(
@@ -264,6 +334,8 @@ def batch_summarization_plot(datafile):
         labels=rate_data.columns, 
         medianprops=dict(color='red')
     )
+
+    print(f'Plot is type: {type(plt)}')
 
     return data, plt
 
@@ -294,15 +366,28 @@ def parallel_batched_summarization_plot(datafile):
 
     data['summarization time (sec.)'] = data['summarization time (sec.)'].astype(float)
     data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(float)
+    data['max memory allocated (bytes)'] = data['max memory allocated (bytes)'].astype(float)
+    data['model memory footprint (bytes)'] = data['model memory footprint (bytes)'].astype(float)
 
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
+    data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 1024**3
+    data['model memory footprint (GB)'] = data['model memory footprint (bytes)'] / 1024**3
     data['jobs per GPU'] = data['workers'] // 4
+
+    max_batch_size = max(data['batch size'])
+    min_batch_size = min(data['batch size'])
+    max_summarization_rate = max(data['summarization rate (abstracts/min.)'])
+    min_summarization_rate = min(data['summarization rate (abstracts/min.)'])
+    max_memory = max(data['max memory allocated (GB)'])
+    min_memory = min(data['max memory allocated (GB)'])
+    axis_pad = 0.1
 
     quantization_types = data['quantization'].unique()
     worker_nums = data['jobs per GPU'].unique()
 
-    fig, axs = plt.subplots(1, 2, figsize=(((len(quantization_types) * 5) + 1), 5), tight_layout=True)
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)
 
+    # Summarization rate plots
     axs_count = 0
 
     for quantization in quantization_types:
@@ -319,24 +404,90 @@ def parallel_batched_summarization_plot(datafile):
             std = plot_data.groupby(['batch size']).std()
             std.reset_index(inplace=True)
 
-            axs[axs_count].set_title(f'Model quantization: {quantization}')
-            axs[axs_count].set_xlabel('Batch size')
-            axs[axs_count].set_ylabel('Summarization rate (abstracts/min.)')
-            axs[axs_count].set_yscale('log', base=2)
-            axs[axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+            axs[0, axs_count].set_title(f'Model quantization: {quantization}')
+            axs[0, axs_count].set_xlabel('Batch size')
+            axs[0, axs_count].set_ylabel('Summarization rate (abstracts/min.)')
 
-            axs[axs_count].errorbar(
+            axs[0, axs_count].set_xlim([
+                (min_batch_size - (min_batch_size * axis_pad)), 
+                (max_batch_size + (max_batch_size * axis_pad))
+            ])
+            
+            axs[0, axs_count].set_ylim([(
+                min_summarization_rate - (min_summarization_rate * axis_pad)), 
+                (max_summarization_rate + (max_summarization_rate * axis_pad))
+            ])
+            
+            axs[0, axs_count].set_xscale('log', base=2)
+            #axs[0, axs_count].set_yscale('log', base=2)
+            #axs[0, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+
+            axs[0, axs_count].errorbar(
                 mean['batch size'], 
                 mean['summarization rate (abstracts/min.)'], 
                 yerr=std['summarization rate (abstracts/min.)'],
-                capsize=5,
+                capsize=2.5,
                 label=workers,
                 linestyle='dotted'
             )
 
         axs_count += 1
 
-    plt.legend(loc='lower right', title='Workers per GPU')
+    # Memory use plots
+    axs_count = 0
+
+    for quantization in quantization_types:
+        quantization_type_data = data[data['quantization'] == quantization].copy()
+        quantization_type_data.drop('quantization', axis=1, inplace=True)
+
+        for workers in worker_nums:
+
+            plot_data = quantization_type_data[quantization_type_data['jobs per GPU'] == workers]
+
+            mean = plot_data.groupby(['batch size']).mean()
+            mean.reset_index(inplace=True)
+            
+            std = plot_data.groupby(['batch size']).std()
+            std.reset_index(inplace=True)
+
+            axs[1, axs_count].set_title(f'Model quantization: {quantization}')
+            axs[1, axs_count].set_xlabel('Batch size')
+            axs[1, axs_count].set_ylabel('Max allocated memory (GB)')
+
+            axs[1, axs_count].hlines(
+                y=(11.4 * 4), 
+                xmin=(min_batch_size - (min_batch_size * axis_pad)), 
+                xmax=(max_batch_size + (max_batch_size * axis_pad)), 
+                linewidth=0.5,
+                color='red'
+            )
+
+            axs[1, axs_count].set_xlim([
+                (min_batch_size - (min_batch_size * axis_pad)), 
+                (max_batch_size + (max_batch_size * axis_pad))
+            ])
+            
+            axs[1, axs_count].set_ylim([
+                (min_memory - (min_memory * axis_pad)), 
+                50 #(max_memory + (max_memory * axis_pad))
+            ])
+            
+            axs[1, axs_count].set_xscale('log', base=2)
+            #axs[1, axs_count].set_yscale('log', base=2)
+            #axs[1, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+
+            axs[1, axs_count].errorbar(
+                mean['batch size'], 
+                mean['max memory allocated (GB)'], 
+                yerr=std['max memory allocated (GB)'],
+                capsize=2.5,
+                label=workers,
+                linestyle='dotted'
+            )
+
+        axs_count += 1
+
+    plt.legend(loc='upper left', title='Workers per GPU')
 
     return data, plt
 
