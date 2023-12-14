@@ -34,14 +34,14 @@ if __name__ == "__main__":
         description = 'Launcher for project benchmarks. Choose which to run via command line args:',
         epilog = 'Bottom text'
     )
-    
+
     # Add arguments
     for argument in arguments:
 
         parser.add_argument(
-            argument[0], 
-            choices=[str(True), str(False)], 
-            default=str(False), 
+            argument[0],
+            choices=[str(True), str(False)],
+            default=str(False),
             help=argument[1]
         )
 
@@ -54,15 +54,14 @@ if __name__ == "__main__":
 
     # Create multiprocessing queue so we can run each benchmark
     # in it's own subprocess. This makes sure that any artifacts
-    # e.g. CUDA context die with the benchmark and don't 
+    # e.g. CUDA context die with the benchmark and don't
     # interfere with subsequent tests
     queue = Queue()
-
 
     # Initial load, summarize, insert timing benchmark
     if args.baseline_execute == 'True' or args.run_all == 'True':
 
-        p = Process(target=baseline_execute.benchmark, 
+        p = Process(target=baseline_execute.benchmark,
             kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     # SQL insert benchmark
     if args.sql_insert == 'True' or args.run_all == 'True':
 
-        p = Process(target=sql.benchmark, 
+        p = Process(target=sql.benchmark,
             kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
@@ -92,10 +91,10 @@ if __name__ == "__main__":
                 replicates=10,
                 abstract_nums=[10000, 200000, 400000],
                 insert_strategies=[
-                    'execute_many', 
-                    'execute_batch', 
-                    'execute_values', 
-                    'mogrify', 
+                    'execute_many',
+                    'execute_batch',
+                    'execute_values',
+                    'mogrify',
                     'stringIO'
                 ],
                 db_name=conf.DB_NAME,
@@ -112,7 +111,7 @@ if __name__ == "__main__":
     # Huggingface device map strategy for summarization benchmark
     if args.hf_device_map == 'True' or args.run_all == 'True':
 
-        p = Process(target=device_map.benchmark, 
+        p = Process(target=device_map.benchmark,
             kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
@@ -120,11 +119,11 @@ if __name__ == "__main__":
                 replicates=10,
                 num_abstracts=3,
                 device_map_strategies=[
-                    'CPU only', 
-                    'multi-GPU', 
-                    'single GPU', 
-                    'balanced', 
-                    'balanced_low_0', 
+                    'CPU only',
+                    'multi-GPU',
+                    'single GPU',
+                    'balanced',
+                    'balanced_low_0',
                     'sequential'
                 ],
                 db_name=conf.DB_NAME,
@@ -141,7 +140,7 @@ if __name__ == "__main__":
     # Model quantization benchmark
     if args.model_quantization == 'True' or args.run_all == 'True':
 
-        p = Process(target=quantization.benchmark, 
+        p = Process(target=quantization.benchmark,
                 kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
@@ -150,16 +149,16 @@ if __name__ == "__main__":
                 num_abstracts=3,
                 quantization_strategies=[
                     'none',
-                    'eight bit', 
-                    'four bit', 
+                    'eight bit',
+                    'four bit',
                     'four bit nf4',
                     'nested four bit',
                     'nested four bit nf4',
                     'none + BT',
-                    'eight bit + BT', 
-                    'four bit + BT', 
+                    'eight bit + BT',
+                    'four bit + BT',
                     'four bit nf4 + BT',
-                    'nested four bit + BT',
+	                    'nested four bit + BT',
                     'nested four bit nf4 + BT',
                 ],
                 db_name=conf.DB_NAME,
@@ -176,15 +175,15 @@ if __name__ == "__main__":
     # Batched summarization benchmark
     if args.batched_summarization == 'True' or args.run_all == 'True':
 
-        p = Process(target=batched_summarization.benchmark, 
+        p = Process(target=batched_summarization.benchmark,
             kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
                 replicates=5,
                 batches=3,
-                batch_sizes=[64, 72, 80, 88, 96, 104, 112, 120, 128],
-                quantization_strategies=['four bit'],
+                batch_sizes=[30, 31, 32, 33, 34, 35, 36],
+                quantization_strategies=['none'],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -199,16 +198,16 @@ if __name__ == "__main__":
     # Data parallel summarization benchmark
     if args.parallel_summarization == 'True' or args.run_all == 'True':
 
-        p = Process(target=parallel.benchmark, 
+        p = Process(target=parallel.benchmark,
             kwargs=dict(
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
                 replicates=5,
                 batches=3,
                 devices=[
-                    'GPU', 
-                    'CPU: 1 thread per worker', 
-                    'CPU: 2 threads per worker', 
+                    'GPU',
+                    'CPU: 1 thread per worker',
+                    'CPU: 2 threads per worker',
                     'CPU: 4 threads per worker'
                 ],
                 workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
@@ -219,7 +218,7 @@ if __name__ == "__main__":
                 host=conf.HOST
             )
         )
-        
+
         p.start()
         p.join()
 
@@ -227,7 +226,7 @@ if __name__ == "__main__":
     # Data parallel batched summarization benchmark
     if args.parallel_batched_summarization == 'True' or args.run_all == 'True':
 
-        p = Process(target=parallel_batched.benchmark, 
+        p = Process(target=parallel_batched.benchmark,
             kwargs=dict(
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
@@ -243,6 +242,6 @@ if __name__ == "__main__":
                 host=conf.HOST
             )
         )
-        
+
         p.start()
         p.join()
