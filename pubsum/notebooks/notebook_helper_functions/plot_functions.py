@@ -229,10 +229,10 @@ def batch_summarization_plot(
     axs[0, 0].set_title('Max memory allocated: un-quantized model')
     axs[0, 0].set_xlabel('Batch size')
     axs[0, 0].set_ylabel('GPU memory (GB)')
-    axs[0, 0].set_xlim([-0.95, 7])
+    axs[0, 0].set_xlim([-0.95, 8])
     axs[0, 0].set_ylim([0, 12])
-    axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='red')
-    axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=7, linewidth=1, color='y')
+    axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
     #axs[0, 0].annotate('Model\nFootprint', xy=(-0.9, 4), color='red')
     #axs[0, 0].annotate('OOM', xy=(5.1, 1), color='black')
     axs[0, 0].bar(
@@ -268,10 +268,10 @@ def batch_summarization_plot(
     axs[0, 1].set_title('Max memory allocated: quantized model')
     axs[0, 1].set_xlabel('Batch size')
     axs[0, 1].set_ylabel('GPU memory (GB)')
-    axs[0, 1].set_xlim([-0.95, 7])
+    axs[0, 1].set_xlim([-0.95, 8])
     axs[0, 1].set_ylim([0, 12])
-    axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=7, linewidth=1, color='red')
-    axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=7, linewidth=1, color='y')
+    axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
     #axs[0, 1].annotate('Model\nFootprint', xy=(-0.9, 1.5), color='red')
     axs[0, 1].bar(
         x=list(range(len(mean_max_memory_data['max memory allocated (GB)']))), 
