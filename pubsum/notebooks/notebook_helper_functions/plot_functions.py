@@ -219,8 +219,6 @@ def batch_summarization_plot(
     max_rate = math.ceil(max(data['summarization rate (abstracts/min.)']))
     min_rate = math.floor(min(data['summarization rate (abstracts/min.)']))
 
-    print(f'Rate axis limits: {min_rate}, {max_rate}')
-
     fig, axs = plt.subplots(2, 2, figsize=(9, 9), tight_layout=True)
 
     unquantized_data = data[data['quantization'] == 'none']
