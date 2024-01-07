@@ -1,19 +1,17 @@
 # Notes
 
-## 1. FlashAttention-2 not implemented by model
+1. FlashAttention-2 not implemented by model
+2. autoGPTQ does not support T5 models
+3. AWQ only works on GPUs with compute >= 8.0
+4. Attempting to load model with 8 bit quantization gives the following error:
 
-## 2. autoGPTQ does not support T5 models
-
-## 3. AWQ only works on GPUs with compute >= 8.0
-## 4. Attempting to load model with 8 bit quantization gives the following error
-
-```
+```text
 Error named symbol not found at line 529 in file /mmfs1/gscratch/zlab/timdettmers/git/bnb/csrc/ops.cu
 ```
 
 Also relevant:
 
-```
+```text
 $ python -m bnb
 
 ===================================BUG REPORT===================================
@@ -97,7 +95,8 @@ WARNING: Please be sure to sanitize sensible info from any such env vars!
 
 Error named symbol not found at line 117 in file /mmfs1/gscratch/zlab/timdettmers/git/bnb/csrc/ops.cu
 ```
-First, looks like we are stuck with 'slow 8-bit matmul' because of the age of our GPUs, we can test it anyway. Also 4-bit should work, I'm my reading on the bnb github repo, all GPUs support 4-bit.
+
+First, looks like we are stuck with 'slow 8-bit matmul' because of the age of our GPUs, but we can test it anyway. Also 4-bit should work, in my reading on the bnb github repo, all GPUs support 4-bit.
 
 Next, looks like bnb had some trouble finding libcudart.so seems like maybe it's because our CUDA install is not in the virtual environment. Seems like it gets found eventually, so leave it alone for now.
 
@@ -105,7 +104,7 @@ The thing with the ionos dynamic DNS directory in the path being non-existent is
 
 Some other issues present, but the last line brought me to the [this issue](https://github.com/TimDettmers/bnb/issues/566) on github. Following those instructions gives the following:
 
-```
+```text
 $ python -m bnb
 
 ===================================BUG REPORT===================================
@@ -183,7 +182,7 @@ Seems like bnb finds cuda more easily but problem persists - some others in the 
 
 After some further reading in the [github repo](https://github.com/TimDettmers/bnb), I noticed that the compile from source instructions mention using a different make target for kepler cards. See [here](https://github.com/TimDettmers/bnb/blob/main/compile_from_source.md). Following those instructions seems to fix the issue:
 
-```
+```text
 $ python -m bnb
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -226,7 +225,7 @@ Installation was successful!
 
 Now the benchmark runs, but we have two more issues. During benchmark runs with no quantization we get the following warning:
 
-```
+```text
 W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
 ```
 
@@ -234,14 +233,14 @@ Trivial fix - not even sure why or what is looking or TensorRT, as far as I know
 
 Eight bit quantization works with no issues, but four bit complains:
 
-```
+```text
 bnb/nn/modules.py:226: UserWarning: Input type into Linear4bit is torch.float16, but bnb_4bit_compute_type=torch.float32 (default). This will lead to slow inference or training speed.
   warnings.warn(f'Input type into Linear4bit is torch.float16, but bnb_4bit_compute_type=torch.float32 (default). This will lead to slow inference or training speed.')
 ```
 
 Fixed by adding the following to model load:
 
-```
+```text
 bnb_4bit_compute_dtype=torch.float16
 ```
 
@@ -249,7 +248,7 @@ Note: this is different from the torch.bfloat16 suggested in the [huggingface do
 
 ## 5. Also, sometimes getting the following warning
 
-```
+```text
 huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
 To disable this warning, you can either:
         - Avoid using `tokenizers` before the fork if possible
@@ -261,7 +260,7 @@ A little strange since we are not using multiprocessing for this benchmark - it 
 
 Fixed by setting:
 
-```
+```text
 os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 ```
 
