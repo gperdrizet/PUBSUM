@@ -180,7 +180,7 @@ Error named symbol not found at line 117 in file /mmfs1/gscratch/zlab/timdettmer
 
 Seems like bnb finds cuda more easily but problem persists - some others in the issue thread report the same.
 
-After some further reading in the [github repo](https://github.com/TimDettmers/bnb), I noticed that the compile from source instructions mention using a different make target for kepler cards. See [here](https://github.com/TimDettmers/bnb/blob/main/compile_from_source.md). Following those instructions seems to fix the issue:
+After some further reading in the [github repo](https://github.com/TimDettmers/bitsandbytes), I noticed that the compile from source instructions mention using a different make target for kepler cards. See [here](https://github.com/TimDettmers/bitsandbytes/blob/main/compile_from_source.md). Following those instructions seems to fix the issue:
 
 ```text
 $ python -m bnb
