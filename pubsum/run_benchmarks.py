@@ -8,6 +8,7 @@ import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarization.benchmark as parallel
 import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarization.benchmark as parallel_batched
+import benchmarks.optimized_execute_time as optimized_execute
 from multiprocessing import Process, Queue
 
 if __name__ == "__main__":
@@ -24,6 +25,7 @@ if __name__ == "__main__":
         ['--batched_summarization', 'Run batched summarization benchmark?'],
         ['--parallel_summarization', 'Run data parallel summarization benchmark?'],
         ['--parallel_batched_summarization', 'Run data parallel batched summarization benchmark?'],
+        ['--optimized_execute', 'Run optimized load, summarize, insert benchmark?'],
         ['--run_all', 'Run all benchmarks?'],
         ['--resume', 'Resume prior run and append data?']
     ]
@@ -232,10 +234,30 @@ if __name__ == "__main__":
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
                 replicates=5,
                 batches=3,
-                batch_sizes=[1, 2, 4, 8, 16, 32, 64, 128],
+                batch_sizes=[1, 2, 4, 8, 10, 12, 14, 16, 32, 64, 128],
                 workers=[4, 8, 12, 16, 20, 24],
                 gpus=conf.GPUS,
                 quantization_strategies=['none', 'four bit'],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
+        )
+
+        p.start()
+        p.join()
+
+    # Optimized load, summarize, insert timing benchmark
+    if args.optimized_execute == 'True' or args.run_all == 'True':
+
+        p = Process(target=optimized_execute.benchmark,
+            kwargs=dict(
+                helper_funcs=helper_funcs,
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
+                replicates=50,
+                num_abstracts=3,
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
