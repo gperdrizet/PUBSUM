@@ -182,28 +182,19 @@ Seems like bnb finds cuda more easily but problem persists - some others in the 
 
 After some further reading in the [github repo](https://github.com/TimDettmers/bitsandbytes), I noticed that the compile from source instructions mention using a different make target for kepler cards. See [here](https://github.com/TimDettmers/bitsandbytes/blob/main/compile_from_source.md). Following those instructions seems to fix the issue:
 
-```text
-$ python -m bnb
+```bash
+git clone https://github.com/TimDettmers/bitsandbytes.git
+cd bitsandbytes
+CUDA_VERSION=118 make cuda11x_nomatmul_kepler
+python setup.py install
+```
 
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-++++++++++++++++++ BUG REPORT INFORMATION ++++++++++++++++++
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Note: this install is for a pair of K80s, which are kepler cards, hence the _kepler. Also we are running cuda 11.4/11.4 but the CUDA_VERSION=118 is correct. Running make with CUDA_VERSION=11.4 does not work.
 
-++++++++++++++++++ /usr/local CUDA PATHS +++++++++++++++++++
-/usr/local/cuda-11.8/targets/x86_64-linux/lib/libcudart.so
-/usr/local/cuda-11.8/targets/x86_64-linux/lib/stubs/libcuda.so
-
-+++++++++++++++ WORKING DIRECTORY CUDA PATHS +++++++++++++++
-/home/siderealyear/arkk/bnb/bnb/libbnb_cuda117.so
-/home/siderealyear/arkk/bnb/bnb/libbnb_cuda118.so
-/home/siderealyear/arkk/bnb/bnb/libbnb_cuda117_nocublaslt.so
-/home/siderealyear/arkk/bnb/build/lib/bnb/libbnb_cuda117.so
-/home/siderealyear/arkk/bnb/build/lib/bnb/libbnb_cuda118.so
-/home/siderealyear/arkk/bnb/build/lib/bnb/libbnb_cuda117_nocublaslt.so
+```bash
+$ python -m bitsandbytes
 
 ++++++++++++++++++ LD_LIBRARY CUDA PATHS +++++++++++++++++++
-+++++++++++++ /usr/local/cuda/lib64 CUDA PATHS +++++++++++++
-
 
 ++++++++++++++++++++++++++ OTHER +++++++++++++++++++++++++++
 COMPILED_WITH_CUDA = True
