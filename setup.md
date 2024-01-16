@@ -127,6 +127,8 @@ Success!
 
 ## Set-up of HuggingFace Transformers with TensorFlow 2 GPU
 
+**TODO**: Replace pytorch and bitsandbytes setup.
+
 **N.B.** NVIDIA driver 470 and CUDA 11.8 are already installed.
 
 ### 1. Create virtual environment
@@ -262,3 +264,15 @@ Note: instructions above were amended with the following fix. Explicitly supply 
 ```
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis',model='distilbert-base-uncased-finetuned-sst-2-english', revision='af0f99b')('we love you'))"
 ```
+
+#### d. Update HuggingFace cache environment variable
+
+Although everything seems to be working, seeing the following warning:
+
+```bash
+transformers/generation/utils.py:2916: UserWarning: Specified kernel cache directory could not be created! This disables kernel caching. Specified directory is /home/siderealyear/.cache/torch/kernels. This warning will appear only once per process. (Triggered internally at ../aten/src/ATen/native/cuda/jit_utils.cpp:1442.)
+```
+
+Added TRANSFORMERS_CACHE environment variable to .venv/bin/activate.
+
+Later, updated to HF_HOME due to depreciation notice.
