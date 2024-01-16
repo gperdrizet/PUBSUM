@@ -14,7 +14,7 @@ def benchmark(
     replicates: int,
     batches: int,
     batch_sizes: List[int],
-    workers: List[int],
+    workers_per_gpu: List[int],
     gpus: List[str],
     quantization_strategies: List[str],
     db_name: str, 
@@ -43,7 +43,7 @@ def benchmark(
     # Subset of collection vars which are sufficient to uniquely identify each run
     unique_collection_vars = [
         'quantization',
-        'workers',
+        'workers per GPU',
         'batch size',
         'replicate'
     ]
@@ -61,7 +61,7 @@ def benchmark(
 
     parameter_sets = itertools.product(
         quantization_strategies,
-        workers,
+        workers_per_gpu,
         batch_sizes,
         replicate_numbers
     )
@@ -70,7 +70,7 @@ def benchmark(
     # (quantization, workers, batch_size) - replicate number omitted
     oom_parameter_sets = []
 
-    if len(quantization_strategies) * len(workers) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
+    if len(quantization_strategies) * len(workers_per_gpu) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
         print('Run is complete')
     
     else:
@@ -82,10 +82,13 @@ def benchmark(
             if parameter_set not in completed_runs:
 
                 # Unpack parameters from set
-                quantization, workers, batch_size, replicate = parameter_set
+                quantization, workers_per_gpu, batch_size, replicate = parameter_set
 
                 # Calculate total abstracts needed for job
                 num_abstracts = batches * batch_size
+
+                # Calculate total workers
+                workers = workers_per_gpu * len(gpus)
 
                 # Print run parameters
                 print(f'\nParallel batched summarization:\n')
@@ -93,7 +96,7 @@ def benchmark(
                 print(f' Model quantization: {quantization}')
                 print(f' Batch size: {batch_size}')
                 print(f' Batches: {batches}')
-                print(f' Workers: {workers}\n')
+                print(f' Workers per GPU: {workers_per_gpu}\n')
 
                 # Instantiate results object for this run
                 results = helper_funcs.Results(
@@ -106,8 +109,8 @@ def benchmark(
                 results.data['replicate'].append(replicate)
                 results.data['batches'].append(batches)
                 results.data['batch size'].append(batch_size)
-                results.data['workers'].append(workers)
-                results.data['workers per GPU'].append(workers // len(gpus))
+                results.data['workers'].append(workers_per_gpu)
+                results.data['workers per GPU'].append(workers_per_gpu)
                 results.data['quantization'].append(quantization)
 
                 # Then, check to see if this parameter set has caused an
@@ -327,7 +330,7 @@ def start_llm(
     # Initialize model with selected device map
     model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
         'haining/scientific_abstract_simplification', 
-        device_map = gpu,
+        device_map=gpu,
         quantization_config=quantization_config
     )
     
