@@ -20,7 +20,7 @@ def benchmark(
     host: str
 ):
 
-    print(f'\nRunning baseline execution time benchmark. Resume = {resume}.')
+    print(f'\nRunning optimized execution time benchmark. Resume = {resume}.')
 
     # Keys for data collection
     collection_vars = [
