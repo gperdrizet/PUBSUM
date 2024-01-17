@@ -68,6 +68,13 @@ def benchmark(
                 # Unpack parameters from set
                 device_map_strategy, replicate = parameter_set
 
+                # Decide if we need to move encoding to GPU
+                if device_map_strategy != 'CPU only':
+                    use_GPU = True
+
+                else:
+                    use_GPU = False
+
                 print(f'\nHF device map strategy benchmark:\n')
                 print(f' Replicate: {replicate} of {replicates}')
                 print(f' Device map strategy: {device_map_strategy}')
@@ -103,13 +110,6 @@ def benchmark(
 
                     # Get abstract text for this row
                     abstract = row[1]
-
-                    # Decide if we need to move encoding to GPU
-                    if device_map_strategy != 'CPU only':
-                        use_GPU = True
-
-                    else:
-                        use_GPU = False
 
                     summary = helper_funcs.summarize(
                         abstracts=[abstract], 
@@ -161,8 +161,8 @@ def start_llm(device_map_strategy: str) -> Tuple[
         elif device_map_strategy == 'balanced':
             device_map = 'balanced'
 
-        elif device_map_strategy == 'balanced_low_0':
-            device_map = 'balanced_low_0'
+        # elif device_map_strategy == 'balanced_low_0':
+        #     device_map = 'balanced_low_0'
 
         elif device_map_strategy == 'sequential':
             device_map = 'sequential'
