@@ -70,4 +70,4 @@ BENCHMARK_DIR = f'{PROJECT_ROOT_PATH}/benchmarks/'
 
 # Available GPUs
 #GPUS = [f'cuda:{i}' for i in range(torch.cuda.device_count())]
-GPUS = ['cuda:0', 'cuda:1', 'cuda:2', 'cuda:3']
+GPUS = ['cuda:0', 'cuda:1'] #, 'cuda:2', 'cuda:3']
