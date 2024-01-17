@@ -1,0 +1,132 @@
+
+==============NVSMI LOG==============
+
+Timestamp                                 : Wed Jan 17 00:27:14 2024
+Driver Version                            : 470.42.01
+CUDA Version                              : 11.4
+
+Attached GPUs                             : 4
+GPU 00000000:05:00.0
+    Supported Clocks
+        Memory                            : 2505 MHz
+            Graphics                      : 875 MHz
+            Graphics                      : 862 MHz
+            Graphics                      : 849 MHz
+            Graphics                      : 836 MHz
+            Graphics                      : 823 MHz
+            Graphics                      : 810 MHz
+            Graphics                      : 797 MHz
+            Graphics                      : 784 MHz
+            Graphics                      : 771 MHz
+            Graphics                      : 758 MHz
+            Graphics                      : 745 MHz
+            Graphics                      : 732 MHz
+            Graphics                      : 719 MHz
+            Graphics                      : 705 MHz
+            Graphics                      : 692 MHz
+            Graphics                      : 679 MHz
+            Graphics                      : 666 MHz
+            Graphics                      : 653 MHz
+            Graphics                      : 640 MHz
+            Graphics                      : 627 MHz
+            Graphics                      : 614 MHz
+            Graphics                      : 601 MHz
+            Graphics                      : 588 MHz
+            Graphics                      : 575 MHz
+            Graphics                      : 562 MHz
+        Memory                            : 324 MHz
+            Graphics                      : 324 MHz
+
+GPU 00000000:06:00.0
+    Supported Clocks
+        Memory                            : 2505 MHz
+            Graphics                      : 875 MHz
+            Graphics                      : 862 MHz
+            Graphics                      : 849 MHz
+            Graphics                      : 836 MHz
+            Graphics                      : 823 MHz
+            Graphics                      : 810 MHz
+            Graphics                      : 797 MHz
+            Graphics                      : 784 MHz
+            Graphics                      : 771 MHz
+            Graphics                      : 758 MHz
+            Graphics                      : 745 MHz
+            Graphics                      : 732 MHz
+            Graphics                      : 719 MHz
+            Graphics                      : 705 MHz
+            Graphics                      : 692 MHz
+            Graphics                      : 679 MHz
+            Graphics                      : 666 MHz
+            Graphics                      : 653 MHz
+            Graphics                      : 640 MHz
+            Graphics                      : 627 MHz
+            Graphics                      : 614 MHz
+            Graphics                      : 601 MHz
+            Graphics                      : 588 MHz
+            Graphics                      : 575 MHz
+            Graphics                      : 562 MHz
+        Memory                            : 324 MHz
+            Graphics                      : 324 MHz
+
+GPU 00000000:09:00.0
+    Supported Clocks
+        Memory                            : 2505 MHz
+            Graphics                      : 875 MHz
+            Graphics                      : 862 MHz
+            Graphics                      : 849 MHz
+            Graphics                      : 836 MHz
+            Graphics                      : 823 MHz
+            Graphics                      : 810 MHz
+            Graphics                      : 797 MHz
+            Graphics                      : 784 MHz
+            Graphics                      : 771 MHz
+            Graphics                      : 758 MHz
+            Graphics                      : 745 MHz
+            Graphics                      : 732 MHz
+            Graphics                      : 719 MHz
+            Graphics                      : 705 MHz
+            Graphics                      : 692 MHz
+            Graphics                      : 679 MHz
+            Graphics                      : 666 MHz
+            Graphics                      : 653 MHz
+            Graphics                      : 640 MHz
+            Graphics                      : 627 MHz
+            Graphics                      : 614 MHz
+            Graphics                      : 601 MHz
+            Graphics                      : 588 MHz
+            Graphics                      : 575 MHz
+            Graphics                      : 562 MHz
+        Memory                            : 324 MHz
+            Graphics                      : 324 MHz
+
+GPU 00000000:0A:00.0
+    Supported Clocks
+        Memory                            : 2505 MHz
+            Graphics                      : 875 MHz
+            Graphics                      : 862 MHz
+            Graphics                      : 849 MHz
+            Graphics                      : 836 MHz
+            Graphics                      : 823 MHz
+            Graphics                      : 810 MHz
+            Graphics                      : 797 MHz
+            Graphics                      : 784 MHz
+            Graphics                      : 771 MHz
+            Graphics                      : 758 MHz
+            Graphics                      : 745 MHz
+            Graphics                      : 732 MHz
+            Graphics                      : 719 MHz
+            Graphics                      : 705 MHz
+            Graphics                      : 692 MHz
+            Graphics                      : 679 MHz
+            Graphics                      : 666 MHz
+            Graphics                      : 653 MHz
+            Graphics                      : 640 MHz
+            Graphics                      : 627 MHz
+            Graphics                      : 614 MHz
+            Graphics                      : 601 MHz
+            Graphics                      : 588 MHz
+            Graphics                      : 575 MHz
+            Graphics                      : 562 MHz
+        Memory                            : 324 MHz
+            Graphics                      : 324 MHz
+

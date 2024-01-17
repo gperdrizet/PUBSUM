@@ -232,10 +232,10 @@ if __name__ == "__main__":
             kwargs=dict(
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
-                replicates=5,
+                replicates=10,
                 batches=3,
-                batch_sizes=[9],
-                workers_per_gpu=[2],
+                batch_sizes=[29],
+                workers_per_gpu=[1],
                 gpus=conf.GPUS,
                 quantization_strategies=['none'],
                 db_name=conf.DB_NAME,
