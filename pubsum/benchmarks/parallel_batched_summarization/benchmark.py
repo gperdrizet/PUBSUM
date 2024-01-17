@@ -169,9 +169,9 @@ def benchmark(
                             )
                         )
 
-                        # Increment GPU index - we have four GPUs, so when the index gets 
-                        # to 3 (0 anchored), reset it back to 0, otherwise increment it.
-                        if gpu_index == 3:
+                        # Increment GPU index - when the GPU index gets to one less than the total 
+                        # number of GPUs, reset it back to 0, otherwise increment it.
+                        if gpu_index == len(gpus) - 1:
                             gpu_index = 0
                         
                         else:
