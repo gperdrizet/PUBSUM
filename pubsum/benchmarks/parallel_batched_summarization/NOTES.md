@@ -322,3 +322,5 @@ Yep - the CUDA + quantization hypothesis just went out the window. Unquantized j
 ```
 
 So, we were hitting the cards a bit harder, basically touching the power limit in some cases - but temps were fine and no memory errors. Starting to feel like at least one of these cards is cooked. Let's try a full poweroff and reseat the cards, then a clean boot and a run with no quantization. Failing that, we might need to (hopefully) determine which card is causing the problem and just pull it and run on one K80.
+
+That seemed to solve it - running on one K80 is stable. Guess we cooked a GPU, time to move on.
