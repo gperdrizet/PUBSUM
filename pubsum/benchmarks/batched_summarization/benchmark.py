@@ -215,6 +215,13 @@ def start_llm(quantization: str) -> Tuple[
                 bnb_4bit_compute_dtype=torch.float16
             )
 
+        elif quantization == 'four bit nf4':
+            quantization_config = transformers.BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type='nf4',
+                bnb_4bit_compute_dtype=torch.float16
+            )
+
         # Initialize the tokenizer
         tokenizer = transformers.AutoTokenizer.from_pretrained('haining/scientific_abstract_simplification')
 
