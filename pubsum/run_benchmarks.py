@@ -19,13 +19,13 @@ if __name__ == "__main__":
 
     arguments = [
         ['--baseline_execute', 'Run MVP load, summarize, insert benchmark?'],
-        ['--sql_insert', 'Run sql insert benchmark?'],
         ['--hf_device_map', 'Run huggingface device map benchmark?'],
+        ['--parallel_summarization', 'Run data parallel summarization benchmark?'],
         ['--model_quantization', 'Run model quantization benchmark?'],
         ['--batched_summarization', 'Run batched summarization benchmark?'],
-        ['--parallel_summarization', 'Run data parallel summarization benchmark?'],
         ['--parallel_batched_summarization', 'Run data parallel batched summarization benchmark?'],
-        ['--optimized_execute', 'Run optimized load, summarize, insert benchmark?'],
+        ['--sql_insert', 'Run sql insert benchmark?'],
+        #['--optimized_execute', 'Run optimized load, summarize, insert benchmark?'],
         ['--run_all', 'Run all benchmarks?'],
         ['--resume', 'Resume prior run and append data?']
     ]
@@ -68,7 +68,7 @@ if __name__ == "__main__":
                 helper_funcs=helper_funcs,
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
-                replicates=50,
+                replicates=100,
                 num_abstracts=3,
                 db_name=conf.DB_NAME,
                 user=conf.USER,
@@ -79,36 +79,6 @@ if __name__ == "__main__":
 
         p.start()
         p.join()
-
-
-    # SQL insert benchmark
-    if args.sql_insert == 'True' or args.run_all == 'True':
-
-        p = Process(target=sql.benchmark,
-            kwargs=dict(
-                helper_funcs=helper_funcs,
-                resume=args.resume,
-                master_file_list=conf.MASTER_FILE_LIST,
-                results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
-                replicates=10,
-                abstract_nums=[10000, 200000, 400000],
-                insert_strategies=[
-                    'execute_many',
-                    'execute_batch',
-                    'execute_values',
-                    'mogrify',
-                    'stringIO'
-                ],
-                db_name=conf.DB_NAME,
-                user=conf.USER,
-                passwd=conf.PASSWD,
-                host=conf.HOST
-            )
-        )
-
-        p.start()
-        p.join()
-
 
     # Huggingface device map strategy for summarization benchmark
     if args.hf_device_map == 'True' or args.run_all == 'True':
@@ -118,7 +88,7 @@ if __name__ == "__main__":
                 helper_funcs=helper_funcs,
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
-                replicates=3,
+                replicates=5,
                 num_abstracts=3,
                 device_map_strategies=[
                     'CPU only',
@@ -128,6 +98,34 @@ if __name__ == "__main__":
                     #'balanced_low_0',
                     'sequential'
                 ],
+                db_name=conf.DB_NAME,
+                user=conf.USER,
+                passwd=conf.PASSWD,
+                host=conf.HOST
+            )
+        )
+
+        p.start()
+        p.join()
+
+
+    # Data parallel summarization benchmark
+    if args.parallel_summarization == 'True' or args.run_all == 'True':
+
+        p = Process(target=parallel.benchmark,
+            kwargs=dict(
+                resume=args.resume,
+                results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
+                replicates=5,
+                batches=3,
+                devices=[
+                    'GPU',
+                    'CPU: 1 thread per worker',
+                    'CPU: 2 threads per worker',
+                    'CPU: 4 threads per worker'
+                ],
+                workers=[1, 2, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20],
+                gpus=conf.GPUS,
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -184,36 +182,8 @@ if __name__ == "__main__":
                 results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
                 replicates=3,
                 batches=3,
-                batch_sizes=[1, 2, 4, 8, 16, 32, 64, 128],
-                quantization_strategies=['none', 'four bit nf4'],
-                db_name=conf.DB_NAME,
-                user=conf.USER,
-                passwd=conf.PASSWD,
-                host=conf.HOST
-            )
-        )
-
-        p.start()
-        p.join()
-
-
-    # Data parallel summarization benchmark
-    if args.parallel_summarization == 'True' or args.run_all == 'True':
-
-        p = Process(target=parallel.benchmark,
-            kwargs=dict(
-                resume=args.resume,
-                results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
-                replicates=3,
-                batches=3,
-                devices=[
-                    'GPU',
-                    'CPU: 1 thread per worker',
-                    'CPU: 2 threads per worker',
-                    'CPU: 4 threads per worker'
-                ],
-                workers=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
-                gpus=conf.GPUS,
+                batch_sizes=[18, 20],
+                quantization_strategies=['none'],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -248,16 +218,25 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-    # Optimized load, summarize, insert timing benchmark
-    if args.optimized_execute == 'True' or args.run_all == 'True':
 
-        p = Process(target=optimized_execute.benchmark,
+    # SQL insert benchmark
+    if args.sql_insert == 'True' or args.run_all == 'True':
+
+        p = Process(target=sql.benchmark,
             kwargs=dict(
                 helper_funcs=helper_funcs,
                 resume=args.resume,
-                results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
+                master_file_list=conf.MASTER_FILE_LIST,
+                results_dir=f'{conf.BENCHMARK_DIR}/sql_insert',
                 replicates=50,
-                num_abstracts=3,
+                abstract_nums=[10000, 200000, 400000],
+                insert_strategies=[
+                    'execute_many',
+                    'execute_batch',
+                    'execute_values',
+                    'mogrify',
+                    'stringIO'
+                ],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -267,3 +246,24 @@ if __name__ == "__main__":
 
         p.start()
         p.join()
+
+
+    # # Optimized load, summarize, insert timing benchmark
+    # if args.optimized_execute == 'True' or args.run_all == 'True':
+
+    #     p = Process(target=optimized_execute.benchmark,
+    #         kwargs=dict(
+    #             helper_funcs=helper_funcs,
+    #             resume=args.resume,
+    #             results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
+    #             replicates=50,
+    #             num_abstracts=3,
+    #             db_name=conf.DB_NAME,
+    #             user=conf.USER,
+    #             passwd=conf.PASSWD,
+    #             host=conf.HOST
+    #         )
+    #     )
+
+    #     p.start()
+    #     p.join()
