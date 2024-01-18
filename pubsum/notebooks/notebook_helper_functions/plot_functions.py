@@ -189,6 +189,7 @@ def model_quantization_plot(datafile):
 def batch_summarization_plot(
     datafile: str,
     unique_condition_columns: List[str],
+    quantization_method: str,
     oom_columns: List[str], 
     str_columns: List[str], 
     int_columns: List[str], 
@@ -210,19 +211,25 @@ def batch_summarization_plot(
         oom_replacement_val=oom_replacement_val
     )
 
+    # Clean up any leftover NANs
     data.dropna(axis=0, inplace=True)
 
+    # Do some unit conversion
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
 
-    max_memory = math.ceil(max(data['max memory allocated (GB)']))
+    # Get min and max rate values dataset wide so we can set common axis limits
+    #max_memory = math.ceil(max(data['max memory allocated (GB)']))
     max_rate = math.ceil(max(data['summarization rate (abstracts/min.)']))
     min_rate = math.floor(min(data['summarization rate (abstracts/min.)']))
 
+    # Set figure layout - first column is un-quantized data, second column is quantized data
     fig, axs = plt.subplots(2, 2, figsize=(9, 9), tight_layout=True)
 
+    # Split off un-quantized data for first column
     unquantized_data = data[data['quantization'] == 'none']
 
+    # Get mean and standard deviation of memory use data for plotted values
     mean_max_memory_data = unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()
     std_max_memory_data = unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()
 
@@ -230,9 +237,9 @@ def batch_summarization_plot(
     axs[0, 0].set_xlabel('Batch size')
     axs[0, 0].set_ylabel('GPU memory (GB)')
     axs[0, 0].set_xlim([-0.95, 8])
-    axs[0, 0].set_ylim([0, 12])
-    axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
-    axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
+    axs[0, 0].set_ylim([0, 12]) # Note: this is the total memory of one K80 chip - can we do better?
+    # axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    # axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
     #axs[0, 0].annotate('Model\nFootprint', xy=(-0.9, 4), color='red')
     #axs[0, 0].annotate('OOM', xy=(5.1, 1), color='black')
     axs[0, 0].bar(
@@ -245,6 +252,7 @@ def batch_summarization_plot(
         fill=False
     )
 
+    # Get and re-format rate data from unquantized replicates 
     rate_data = unquantized_data[['replicate', 'batch size', 'summarization rate (abstracts/min.)']]
     rate_data = rate_data.pivot(index='replicate', columns='batch size', values='summarization rate (abstracts/min.)')
 
@@ -260,7 +268,8 @@ def batch_summarization_plot(
         medianprops=dict(color='red')
     )
 
-    quantized_data = data[data['quantization'] == 'four bit']
+    # Repeat above for quantized data - can we refactor this into two plot calls instead of 4 total, individual calls
+    quantized_data = data[data['quantization'] == quantization_method]
 
     mean_max_memory_data = quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()
     std_max_memory_data = quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()
@@ -270,8 +279,8 @@ def batch_summarization_plot(
     axs[0, 1].set_ylabel('GPU memory (GB)')
     axs[0, 1].set_xlim([-0.95, 8])
     axs[0, 1].set_ylim([0, 12])
-    axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
-    axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
+    # axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    # axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
     #axs[0, 1].annotate('Model\nFootprint', xy=(-0.9, 1.5), color='red')
     axs[0, 1].bar(
         x=list(range(len(mean_max_memory_data['max memory allocated (GB)']))), 
