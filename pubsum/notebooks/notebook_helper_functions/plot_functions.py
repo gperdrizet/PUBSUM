@@ -42,7 +42,6 @@ def baseline_execution_plot(datafile):
 
     return data, plt
 
-
 def device_map_plot(datafile):
 
     data = pd.read_csv(datafile)
@@ -58,7 +57,6 @@ def device_map_plot(datafile):
     axs.boxplot(wide_data, labels=wide_data.columns)
 
     return data, plt
-
 
 def parallel_summarization_plot(datafile):
 
@@ -152,7 +150,6 @@ def parallel_summarization_plot(datafile):
 
     return data, plt
 
-
 def model_quantization_plot(datafile):
 
     data = pd.read_csv(datafile)
@@ -185,7 +182,6 @@ def model_quantization_plot(datafile):
 
     return data, plt
 
-
 def batch_summarization_plot(
     datafile: str,
     unique_condition_columns: List[str],
@@ -211,102 +207,71 @@ def batch_summarization_plot(
         oom_replacement_val=oom_replacement_val
     )
 
-    # Clean up any leftover NANs
-    data.dropna(axis=0, inplace=True)
-
     # Do some unit conversion
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
 
-    # Get min and max rate values dataset wide so we can set common axis limits
-    #max_memory = math.ceil(max(data['max memory allocated (GB)']))
-    max_rate = math.ceil(max(data['summarization rate (abstracts/min.)']))
-    min_rate = math.floor(min(data['summarization rate (abstracts/min.)']))
+    # Clean up any leftover NANs
+    data.dropna(axis=0, inplace=True)
 
     # Set figure layout - first column is un-quantized data, second column is quantized data
-    fig, axs = plt.subplots(2, 2, figsize=(9, 9), tight_layout=True)
+    fig, axs = plt.subplots(1, 2, figsize=(7, 3.5), tight_layout=True)
 
-    # Split off un-quantized data for first column
+    # Split quantized and unquantized data
     unquantized_data = data[data['quantization'] == 'none']
-
-    # Get mean and standard deviation of memory use data for plotted values
-    mean_max_memory_data = unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()
-    std_max_memory_data = unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()
-
-    axs[0, 0].set_title('Max memory allocated: un-quantized model')
-    axs[0, 0].set_xlabel('Batch size')
-    axs[0, 0].set_ylabel('GPU memory (GB)')
-    axs[0, 0].set_xlim([-0.95, 8])
-    axs[0, 0].set_ylim([0, 12]) # Note: this is the total memory of one K80 chip - can we do better?
-    # axs[0, 0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
-    # axs[0, 0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
-    #axs[0, 0].annotate('Model\nFootprint', xy=(-0.9, 4), color='red')
-    #axs[0, 0].annotate('OOM', xy=(5.1, 1), color='black')
-    axs[0, 0].bar(
-        x=list(range(len(mean_max_memory_data['max memory allocated (GB)']))), 
-        height=mean_max_memory_data['max memory allocated (GB)'],
-        yerr=std_max_memory_data['max memory allocated (GB)'] * 3,
-        capsize=5,
-        tick_label=mean_max_memory_data.index,
-        color='black', 
-        fill=False
-    )
-
-    # Get and re-format rate data from unquantized replicates 
-    rate_data = unquantized_data[['replicate', 'batch size', 'summarization rate (abstracts/min.)']]
-    rate_data = rate_data.pivot(index='replicate', columns='batch size', values='summarization rate (abstracts/min.)')
-
-    axs[1, 0].set_title('Summarization rate: un-quantized model')
-    axs[1, 0].set_xlabel('Batch size')
-    axs[1, 0].set_ylabel('Summarization rate\n(abstracts/minute)')
-    #axs[1, 0].annotate('OOM', xy=(6.1, 23), color='black')
-    #axs[1, 0].set_xlim([])
-    axs[1, 0].set_ylim([min_rate, max_rate])
-    axs[1, 0].boxplot(
-        rate_data, 
-        labels=rate_data.columns, 
-        medianprops=dict(color='red')
-    )
-
-    # Repeat above for quantized data - can we refactor this into two plot calls instead of 4 total, individual calls
     quantized_data = data[data['quantization'] == quantization_method]
 
-    mean_max_memory_data = quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()
-    std_max_memory_data = quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()
+    axs[0].set_title('GPU memory use')
+    axs[0].set_xlabel('Batch size')
+    axs[0].set_ylabel('max memory allocated (GB)')
+    # axs[0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    # axs[0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
 
-    axs[0, 1].set_title('Max memory allocated: quantized model')
-    axs[0, 1].set_xlabel('Batch size')
-    axs[0, 1].set_ylabel('GPU memory (GB)')
-    axs[0, 1].set_xlim([-0.95, 8])
-    axs[0, 1].set_ylim([0, 12])
-    # axs[0, 1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
-    # axs[0, 1].hlines(y=974903296 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
-    #axs[0, 1].annotate('Model\nFootprint', xy=(-0.9, 1.5), color='red')
-    axs[0, 1].bar(
-        x=list(range(len(mean_max_memory_data['max memory allocated (GB)']))), 
-        height=mean_max_memory_data['max memory allocated (GB)'],
-        yerr=std_max_memory_data['max memory allocated (GB)'] * 3,
+    axs[0].errorbar(
+        unquantized_data['batch size'].unique(), 
+        unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
+        yerr=unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
         capsize=5,
-        tick_label=mean_max_memory_data.index,
-        color='black', 
-        fill=False
+        marker='o', 
+        linestyle='none',
+        label='unquantized'
     )
 
-    rate_data = quantized_data[['replicate', 'batch size', 'summarization rate (abstracts/min.)']]
-    rate_data = quantized_data.pivot(index='replicate', columns='batch size', values='summarization rate (abstracts/min.)')
+    axs[0].errorbar(
+        quantized_data['batch size'].unique(), 
+        quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
+        yerr=quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
+        capsize=5,
+        marker='o', 
+        linestyle='none',
+        label=quantization_method
+    )
 
-    axs[1, 1].set_title('Summarization rate: quantized model')
-    axs[1, 1].set_xlabel('Batch size')
-    axs[1, 1].set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs[1, 1].set_ylim([min_rate, max_rate])
-    axs[1, 1].boxplot(
-        rate_data, 
-        labels=rate_data.columns, 
-        medianprops=dict(color='red')
+    axs[1].set_title('Summarization rate')
+    axs[1].set_xlabel('Batch size')
+    axs[1].set_ylabel('abstracts/min.')
+
+    axs[1].errorbar(
+        unquantized_data['batch size'].unique(), 
+        unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
+        yerr=unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
+        capsize=5,
+        marker='o', 
+        linestyle='none',
+        label='unquantized'
+    )
+
+    axs[1].errorbar(
+        quantized_data['batch size'].unique(), 
+        quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
+        yerr=quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
+        capsize=5,
+        marker='o', 
+        linestyle='none',
+        label=quantization_method
     )
 
     return data, plt
-
 
 def parallel_batched_summarization_plot(datafile):
 
@@ -458,7 +423,6 @@ def parallel_batched_summarization_plot(datafile):
     plt.legend(loc='upper left', title='Workers per GPU')
 
     return data, plt
-
 
 def sql_insert_plot(datafile):
 
