@@ -108,7 +108,6 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-
     # Data parallel summarization benchmark
     if args.parallel_summarization == 'True' or args.run_all == 'True':
 
@@ -136,7 +135,6 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-
     # Model quantization benchmark
     if args.model_quantization == 'True' or args.run_all == 'True':
 
@@ -145,13 +143,13 @@ if __name__ == "__main__":
                 helper_funcs=helper_funcs,
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/model_quantization',
-                replicates=3,
+                replicates=10,
                 num_abstracts=3,
                 quantization_strategies=[
                     'none',
                     'eight bit',
                     'four bit',
-                    'four bit nf4',
+                    'four bit nf4','max memory allocated (GB)'
                     'nested four bit',
                     'nested four bit nf4',
                     'none + BT',
@@ -171,7 +169,6 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-
     # Batched summarization benchmark
     if args.batched_summarization == 'True' or args.run_all == 'True':
 
@@ -182,8 +179,8 @@ if __name__ == "__main__":
                 results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
                 replicates=3,
                 batches=3,
-                batch_sizes=[18, 20],
-                quantization_strategies=['none'],
+                batch_sizes=[1, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80],
+                quantization_strategies=['none', 'four bit nf4'],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -193,7 +190,6 @@ if __name__ == "__main__":
 
         p.start()
         p.join()
-
 
     # Data parallel batched summarization benchmark
     if args.parallel_batched_summarization == 'True' or args.run_all == 'True':
@@ -217,7 +213,6 @@ if __name__ == "__main__":
 
         p.start()
         p.join()
-
 
     # SQL insert benchmark
     if args.sql_insert == 'True' or args.run_all == 'True':
@@ -246,7 +241,6 @@ if __name__ == "__main__":
 
         p.start()
         p.join()
-
 
     # # Optimized load, summarize, insert timing benchmark
     # if args.optimized_execute == 'True' or args.run_all == 'True':
