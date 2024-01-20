@@ -73,9 +73,6 @@ def benchmark(
                 # Unpack parameters from set
                 quantization_strategy, replicate = parameter_set
 
-                # Calculate total abstracts needed for job
-                num_abstracts = replicates
-
                 print(f'\nModel quantization benchmark:\n')
                 print(f' Replicate: {replicate} of {replicates}')
                 print(f' Model quantization: {quantization_strategy}')
