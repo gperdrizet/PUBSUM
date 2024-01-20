@@ -273,39 +273,36 @@ def batch_summarization_plot(
 
     return data, plt
 
-def parallel_batched_summarization_plot(datafile):
+def parallel_batched_summarization_plot(
+    datafile: str,
+    unique_condition_columns: List[str],
+    quantization_method: str,
+    oom_columns: List[str],
+    str_columns: List[str],
+    int_columns: List[str],
+    float_columns: List[str],
+    oom_replacement_val: Union[str, int, float]
+):
 
     data = pd.read_csv(datafile)
 
-    OOM_columns = [
-        'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)'
-    ]
-
-    OOM = data[data['summarization time (sec.)'] == 'OOM']
-    OOM = OOM[['batch size', 'workers', 'quantization']]
-    OOM_conditions = OOM.to_numpy().tolist()
-
-    for OOM_column in OOM_columns:
-        for condition in OOM_conditions:
-
-            data[OOM_column].loc[
-                (data['batch size'] == condition[0]) &
-                (data['workers'] == condition[1]) &
-                (data['quantization'] == condition[2])
-            ] = np.nan
-
-    data.dropna(inplace=True)
-
-    data['summarization time (sec.)'] = data['summarization time (sec.)'].astype(float)
-    data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(float)
-    data['max memory allocated (bytes)'] = data['max memory allocated (bytes)'].astype(float)
-    data['model memory footprint (bytes)'] = data['model memory footprint (bytes)'].astype(float)
+    # Clean out-of-memory errors and replace with user defined value
+    data = data_funcs.clean_out_of_memory_errors(
+        data=data,
+        unique_condition_columns=unique_condition_columns,
+        oom_columns=oom_columns,
+        str_columns=str_columns,
+        int_columns=int_columns,
+        float_columns=float_columns,
+        oom_replacement_val=oom_replacement_val
+    )
 
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 1024**3
     data['model memory footprint (GB)'] = data['model memory footprint (bytes)'] / 1024**3
-    data['jobs per GPU'] = data['workers'] // 4
+
+    # Clean up any leftover NANs
+    data.dropna(axis=0, inplace=True)
 
     max_batch_size = max(data['batch size'])
     min_batch_size = min(data['batch size'])
@@ -316,7 +313,7 @@ def parallel_batched_summarization_plot(datafile):
     axis_pad = 0.1
 
     quantization_types = data['quantization'].unique()
-    worker_nums = data['jobs per GPU'].unique()
+    worker_nums = data['workers per GPU'].unique()
 
     fig, axs = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)
 
@@ -329,7 +326,7 @@ def parallel_batched_summarization_plot(datafile):
 
         for workers in worker_nums:
 
-            plot_data = quantization_type_data[quantization_type_data['jobs per GPU'] == workers]
+            plot_data = quantization_type_data[quantization_type_data['workers per GPU'] == workers]
 
             mean = plot_data.groupby(['batch size']).mean()
             mean.reset_index(inplace=True)
@@ -375,7 +372,7 @@ def parallel_batched_summarization_plot(datafile):
 
         for workers in worker_nums:
 
-            plot_data = quantization_type_data[quantization_type_data['jobs per GPU'] == workers]
+            plot_data = quantization_type_data[quantization_type_data['workers per GPU'] == workers]
 
             mean = plot_data.groupby(['batch size']).mean()
             mean.reset_index(inplace=True)
