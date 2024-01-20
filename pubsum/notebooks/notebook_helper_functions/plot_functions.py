@@ -150,37 +150,84 @@ def parallel_summarization_plot(datafile):
 
     return data, plt
 
-def model_quantization_plot(datafile):
+def model_quantization_plot(
+    datafile: str
+) -> pd.DataFrame:
 
+    # Load data
     data = pd.read_csv(datafile)
+
+    # Add some derived columns with different units
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['model GPU memory footprint (GB)'] = data['model GPU memory footprint (bytes)'] / 10 ** 9
+    data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
 
-    fig, axs = plt.subplots(2, 1, figsize=(9, 8), tight_layout=True)
+    data.info()
 
-    mean_memory_footprint_data = data[['quantization strategy', 'model GPU memory footprint (GB)']].groupby('quantization strategy').mean()
+    # Set up the figure and axes array
+    fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True, tight_layout=True)
 
-    axs[0].set_title('Model quantization benchmark: model memory footprint')
-    axs[0].set_xlabel('Quantization strategy')
-    axs[0].set_ylabel('GPU memory (GB)')
-    axs[0].tick_params(axis='x', labelrotation=45)
-    axs[0].bar(
-        x=mean_memory_footprint_data.index, 
-        height=mean_memory_footprint_data['model GPU memory footprint (GB)'],
-        color='black',
-        fill=False
+    # Format the data for boxplot
+    plot_data = data[['replicate', 'quantization strategy', 'summarization rate (abstracts/min.)']]
+    plot_data = data.pivot(index='replicate', columns='quantization strategy', values='summarization rate (abstracts/min.)')
+
+    # Make summarization rate boxplot
+    axs[0].boxplot(
+        plot_data,
+        positions=range(len(plot_data.columns)),
+        labels=plot_data.columns,
+        widths=0.8 # Set box widths to match default for bar plot
     )
 
-    rate_data = data[['replicate', 'quantization strategy', 'summarization rate (abstracts/min.)']]
-    rate_data = data.pivot(index='replicate', columns='quantization strategy', values='summarization rate (abstracts/min.)')
+    # Set title inside plot area
+    axs[0].annotate(
+        'Summarization rate', 
+        xy=(0, 1),
+        xytext=(12, -12),
+        va='top',
+        xycoords='axes fraction',
+        textcoords='offset points',
+        fontsize=14
+    )
 
-    axs[1].set_title('Model quantization benchmark: summarization rate')
-    axs[1].set_xlabel('Quantization strategy')
-    axs[1].set_ylabel('Summarization rate\n(abstracts/minute)')
+    # Other labels
+    axs[0].set_ylabel('Abstracts/min.')
+    axs[0].tick_params(axis='x', labelrotation=45)
+
+    # Get mean memory for plotting
+    max_memory_footprint_data = data[['quantization strategy', 'model GPU memory footprint (GB)']].groupby('quantization strategy').max()
+
+    # Make the bar plot for memory use
+    axs[1].bar(
+        x=plot_data.columns, 
+        height=max_memory_footprint_data['model GPU memory footprint (GB)'],
+        color='black',
+        fill=True
+    )
+
+    # Set title inside plot area
+    axs[1].annotate(
+        'Model memory footprint', 
+        xy=(0, 1),
+        xytext=(12, -12),
+        va='top',
+        xycoords='axes fraction',
+        textcoords='offset points',
+        fontsize=14
+    )
+
+    # Other labels
+    axs[1].set_ylabel('GPU memory (GB)')
     axs[1].tick_params(axis='x', labelrotation=45)
-    axs[1].boxplot(rate_data, labels=rate_data.columns)
 
-    return data, plt
+    # Set x axis label
+    fig.text(0.5, 0.04, 'Model quantization strategy', ha='center')
+
+    # Show the plot
+    plt.show()
+
+    # Return the data
+    return data
 
 def batch_summarization_plot(
     datafile: str,
