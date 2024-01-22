@@ -8,27 +8,43 @@ from typing import List, Union
 
 pd.options.mode.chained_assignment = None
 
-def baseline_execution_plot(datafile):
+def baseline_execution_plot(datafile: str) -> pd.DataFrame:
     
+    # Load data
     data = pd.read_csv(datafile)
 
+    # Get means of means
+    mean_total_time = (data['mean_total_time'].mean() / 3).round(1)
+    mean_summarization_time = (data['total_summarization_time'].mean() / 3).round(1)
+    mean_SQL_insert_time = (data['total_insert_time'].mean() / 3).round(3)
+    mean_SQL_load_time = (data['total_loading_time'].mean() / 3).round(2)
+
+    # Lists of plot parameters to loop on
     titles = ['Total', 'Summarization', 'SQL insert', 'SQL load']
     data_types = ['mean_total_time', 'mean_summarization_time', 'mean_insert_time', 'mean_loading_time']
-    xlabels = ['seconds', 'seconds', 'milliseconds', 'milliseconds']
-    xaxis_scales = [1, 1, 10**3, 10**3]
+    means = [mean_total_time, mean_summarization_time, mean_SQL_insert_time, mean_SQL_load_time]
+    xlabels = ['seconds', 'seconds', 'seconds', 'seconds']
+    xaxis_scales = [1, 1, 1, 1]
+    xaxis_decimal_places = [0, 0, 2, 1]
 
-    fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharey=True, tight_layout=True)
+    # Set up plots
+    fig, axs = plt.subplots(1, 4, figsize=(14, 3.5), sharey=True, tight_layout=True)
 
-    fig.suptitle('Execution time distributions')
-    fig.supxlabel('Execution time')
+    # Add text to the figure
+    fig.suptitle('Run time')
+    fig.supxlabel('Sec.')
 
+    # Loop on the lists of plot vars, counting the axis number
     axs_num = 0
 
-    for title, data_type, xlabel, xaxis_scale in zip(titles, data_types, xlabels, xaxis_scales):
+    for title, data_type, mean, xlabel, xaxis_scale, xaxis_decimals in zip(titles, data_types, means, xlabels, xaxis_scales, xaxis_decimal_places):
 
+        # Set plot titles and labels
         axs[axs_num].set_title(title)
-        axs[axs_num].set_xlabel(xlabel)
-        axs[axs_num].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+        #axs[axs_num].set_xlabel(xlabel)
+        axs[axs_num].xaxis.set_major_formatter(FormatStrFormatter(f'%.{xaxis_decimals}f'))
+
+        # Make the plot
         axs[axs_num].hist(
             data[data_type] * xaxis_scale,
             histtype='stepfilled', 
@@ -36,11 +52,55 @@ def baseline_execution_plot(datafile):
             color='black'
         )
 
+        # Set title inside plot area
+        axs[axs_num].annotate(
+            f'mean = {mean}', 
+            xy=(0, 1),
+            xytext=(12, -12),
+            va='top',
+            xycoords='axes fraction',
+            textcoords='offset points',
+            fontsize=10
+        )
+
+        # Incrament to the next axis
         axs_num += 1
 
+    # Set x label on first plot, common for all of the plots
     axs[0].set_ylabel('Replicates (n)')
 
-    return data, plt
+    # Draw the plot
+    plt.show()
+
+    # return the data, incase we want to do something else with it
+    return data
+
+def baseline_execution_pie(datafile: str) -> pd.DataFrame:
+
+    # Load data
+    data = pd.read_csv(datafile)
+
+    # Get means
+    mean_summarization_time = (data['total_summarization_time'].mean() / 3).round(1)
+    mean_SQL_insert_time = (data['total_insert_time'].mean() / 3).round(3)
+    mean_SQL_load_time = (data['total_loading_time'].mean() / 3).round(2)
+
+    fig, axs = plt.subplots(1,1, figsize=(3.5, 3.5))
+
+    axs.set_title('Mean run time per abstract')
+
+    axs.pie(
+        [mean_summarization_time, mean_SQL_insert_time, mean_SQL_load_time],
+        labels=[
+            f'Summarization', 
+            f'SQL load', 
+            f'SQL insert'
+        ],
+        colors=['white', 'black', 'lightgray'],
+        wedgeprops={'linewidth': 0.5, 'edgecolor': 'black'}
+    )
+
+    plt.show
 
 def device_map_plot(datafile):
 
@@ -49,7 +109,7 @@ def device_map_plot(datafile):
 
     wide_data = data.pivot(index='replicate', columns='device map strategy', values='summarization rate (abstracts/min.)')
 
-    fig, axs = plt.subplots(1, 1, figsize=(9, 3), tight_layout=True)
+    fig, axs = plt.subplots(1, 1, figsize=(7, 3.5), tight_layout=True)
 
     axs.set_title('Device map strategy benchmark')
     axs.set_xlabel('Huggingface device map')
@@ -94,7 +154,7 @@ def parallel_summarization_plot(datafile):
 
     devices = ['GPU', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
 
-    fig, axs = plt.subplots(1, 2, figsize=(11, 5), tight_layout=True)
+    fig, axs = plt.subplots(1, 2, figsize=(7, 3.5), tight_layout=True)
 
     axs[0].set_title('Summarization rate')
     axs[0].set_xlabel('Concurrent worker processes')
@@ -162,10 +222,8 @@ def model_quantization_plot(
     data['model GPU memory footprint (GB)'] = data['model GPU memory footprint (bytes)'] / 10 ** 9
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
 
-    data.info()
-
     # Set up the figure and axes array
-    fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True, tight_layout=True)
+    fig, axs = plt.subplots(2, 1, figsize=(14, 7), sharex=True, tight_layout=True)
 
     # Format the data for boxplot
     plot_data = data[['replicate', 'quantization strategy', 'summarization rate (abstracts/min.)']]
@@ -362,7 +420,7 @@ def parallel_batched_summarization_plot(
     quantization_types = data['quantization'].unique()
     worker_nums = data['workers per GPU'].unique()
 
-    fig, axs = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)
+    fig, axs = plt.subplots(2, 2, figsize=(7, 7), tight_layout=True)
 
     # Summarization rate plots
     axs_count = 0
@@ -396,7 +454,7 @@ def parallel_batched_summarization_plot(
             ])
             
             axs[0, axs_count].set_xscale('log', base=2)
-            #axs[0, axs_count].set_yscale('log', base=2)
+            axs[0, axs_count].set_yscale('log', base=2)
             #axs[0, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
             axs[0, axs_count].errorbar(
@@ -431,13 +489,13 @@ def parallel_batched_summarization_plot(
             axs[1, axs_count].set_xlabel('Batch size')
             axs[1, axs_count].set_ylabel('Max allocated memory (GB)')
 
-            axs[1, axs_count].hlines(
-                y=(11.4 * 4), 
-                xmin=(min_batch_size - (min_batch_size * axis_pad)), 
-                xmax=(max_batch_size + (max_batch_size * axis_pad)), 
-                linewidth=0.5,
-                color='red'
-            )
+            # axs[1, axs_count].hlines(
+            #     y=(11.4 * 4), 
+            #     xmin=(min_batch_size - (min_batch_size * axis_pad)), 
+            #     xmax=(max_batch_size + (max_batch_size * axis_pad)), 
+            #     linewidth=0.5,
+            #     color='red'
+            # )
 
             axs[1, axs_count].set_xlim([
                 (min_batch_size - (min_batch_size * axis_pad)), 
@@ -446,10 +504,10 @@ def parallel_batched_summarization_plot(
             
             axs[1, axs_count].set_ylim([
                 (min_memory - (min_memory * axis_pad)), 
-                50 #(max_memory + (max_memory * axis_pad))
+                (max_memory + (max_memory * axis_pad))
             ])
             
-            axs[1, axs_count].set_xscale('log', base=2)
+            #axs[1, axs_count].set_xscale('log', base=2)
             #axs[1, axs_count].set_yscale('log', base=2)
             #axs[1, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
@@ -476,7 +534,7 @@ def sql_insert_plot(datafile):
 
     insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'stringIO']
 
-    fig, axs = plt.subplots(1, 1, figsize=(5, 5), tight_layout=True)
+    fig, axs = plt.subplots(1, 1, figsize=(3.5, 3.5), tight_layout=True)
 
     axs.set_title('SQL insert benchmark')
     axs.set_xlabel('Thousand abstracts inserted')
