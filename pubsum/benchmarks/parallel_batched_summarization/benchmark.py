@@ -13,10 +13,10 @@ def benchmark(
     results_dir: str,
     replicates: int,
     batches: int,
-    batch_sizes: List[int],
-    workers_per_gpu: List[int],
+    batch_size_lists: List[List[int]],
+    workers_per_gpu_lists: List[List[int]],
     gpus: List[str],
-    quantization_strategies: List[str],
+    quantization_strategy_lists: List[List[str]],
     db_name: str, 
     user: str, 
     passwd: str, 
@@ -57,165 +57,165 @@ def benchmark(
     )
 
     # Construct parameter sets
-    replicate_numbers = list(range(1, replicates + 1))
+    for batch_sizes, workers_per_gpu, quantization_strategies in zip(batch_size_lists, workers_per_gpu_lists, quantization_strategy_lists):
+        replicate_numbers = list(range(1, replicates + 1))
 
-    parameter_sets = itertools.product(
-        quantization_strategies,
-        workers_per_gpu,
-        batch_sizes,
-        replicate_numbers
-    )
+        parameter_sets = itertools.product(
+            quantization_strategies,
+            workers_per_gpu,
+            batch_sizes,
+            replicate_numbers
+        )
 
-    # List to hold parameter sets that cause out-of-memory crashes
-    # (quantization, workers, batch_size) - replicate number omitted
-    oom_parameter_sets = []
+        # List to hold parameter sets that cause out-of-memory crashes
+        # (quantization, workers, batch_size) - replicate number omitted
+        oom_parameter_sets = []
 
-    if len(quantization_strategies) * len(workers_per_gpu) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
-        print('Run is complete')
-    
-    else:
+        if len(quantization_strategies) * len(workers_per_gpu) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
+            print('Run is complete')
+        
+        else:
 
-        # Loop on parameter sets to run jobs
-        for parameter_set in parameter_sets:
+            # Loop on parameter sets to run jobs
+            for parameter_set in parameter_sets:
 
-            # Check if we have already completed this parameter set
-            if parameter_set not in completed_runs:
+                # Check if we have already completed this parameter set
+                if parameter_set not in completed_runs:
 
-                # Unpack parameters from set
-                quantization, workers_per_gpu, batch_size, replicate = parameter_set
+                    # Unpack parameters from set
+                    quantization, workers_per_gpu, batch_size, replicate = parameter_set
 
-                # Calculate total abstracts needed for job
-                num_abstracts = batches * batch_size
+                    # Calculate total abstracts needed for job
+                    num_abstracts = batches * batch_size
 
-                # Calculate total workers
-                workers = workers_per_gpu * len(gpus)
+                    # Calculate total workers
+                    workers = workers_per_gpu * len(gpus)
 
-                # Print run parameters
-                print(f'\nParallel batched summarization:\n')
-                print(f' Replicate: {replicate}')
-                print(f' Model quantization: {quantization}')
-                print(f' Batch size: {batch_size}')
-                print(f' Batches: {batches}')
-                print(f' Workers per GPU: {workers_per_gpu}\n')
+                    # Print run parameters
+                    print(f'\nParallel batched summarization:\n')
+                    print(f' Replicate: {replicate}')
+                    print(f' Model quantization: {quantization}')
+                    print(f' Batch size: {batch_size}')
+                    print(f' Batches: {batches}')
+                    print(f' Workers per GPU: {workers_per_gpu}\n')
 
-                # Instantiate results object for this run
-                results = helper_funcs.Results(
-                    results_dir=results_dir,
-                    collection_vars=collection_vars
-                )
-
-                # Collect data for run parameters
-                results.data['abstracts'].append(num_abstracts)
-                results.data['replicate'].append(replicate)
-                results.data['batches'].append(batches)
-                results.data['batch size'].append(batch_size)
-                results.data['workers'].append(workers_per_gpu)
-                results.data['workers per GPU'].append(workers_per_gpu)
-                results.data['quantization'].append(quantization)
-
-                # Then, check to see if this parameter set has caused an
-                # out of memory crash on a previous replicate, if it has
-                # skip it and add OOM flag to results directly. To do this
-                # we need to omit the replicate number and compare only on
-                # quantization, workers and batch size
-                if parameter_set[:-1] in oom_parameter_sets:
-
-                    print(' Skipping parameter set due to prior OOMs.')
-
-                    results.data['summarization time (sec.)'].append('OOM')
-                    results.data['summarization rate (abstracts/sec.)'].append('OOM')
-                    results.data['max memory allocated (bytes)'].append('OOM')
-                    results.data['model memory footprint (bytes)'].append('OOM')
-                
-                # If we have not crashed on this parameter set before, do the run
-                else:
-
-                    # start a counter to pick GPUs for jobs
-                    gpu_index = 0
-
-                    # Instantiate pool with one member for each job we need to run
-                    pool = mp.Pool(
-                        processes = workers,
-                        maxtasksperchild = 1
+                    # Instantiate results object for this run
+                    results = helper_funcs.Results(
+                        results_dir=results_dir,
+                        collection_vars=collection_vars
                     )
 
-                    # Start timer
-                    start = time.time()
+                    # Collect data for run parameters
+                    results.data['abstracts'].append(num_abstracts)
+                    results.data['replicate'].append(replicate)
+                    results.data['batches'].append(batches)
+                    results.data['batch size'].append(batch_size)
+                    results.data['workers'].append(workers_per_gpu)
+                    results.data['workers per GPU'].append(workers_per_gpu)
+                    results.data['quantization'].append(quantization)
 
-                    # Collector for returns from workers
-                    async_results = []
+                    # Then, check to see if this parameter set has caused an
+                    # out of memory crash on a previous replicate, if it has
+                    # skip it and add OOM flag to results directly. To do this
+                    # we need to omit the replicate number and compare only on
+                    # quantization, workers and batch size
+                    if parameter_set[:-1] in oom_parameter_sets:
 
-                    # Loop on jobs for this run
-                    for i in list(range(0, workers)):
+                        print(' Skipping parameter set due to prior OOMs.')
 
-                        # Pick GPU
-                        gpu = gpus[gpu_index]
-
-                        async_results.append(
-                            pool.apply_async(start_job,
-                                args = (
-                                    i,
-                                    db_name,
-                                    user,
-                                    passwd,
-                                    host,
-                                    num_abstracts,
-                                    batches,
-                                    batch_size,
-                                    gpu_index,
-                                    gpu,
-                                    quantization
-                                )
-                            )
-                        )
-
-                        # Increment GPU index - when the GPU index gets to one less than the total 
-                        # number of GPUs, reset it back to 0, otherwise increment it.
-                        if gpu_index == len(gpus) - 1:
-                            gpu_index = 0
-                        
-                        else:
-                            gpu_index += 1
-
-                    # Clean up
-                    pool.close()
-                    pool.join()
-
-                    # Stop the timer
-                    dT = time.time() - start
-
-                    # Get the results
-                    result = [async_result.get() for async_result in async_results]
-                    
-                    # Get model and max memory footprint across workers
-                    run_total_max_memory = 0
-                    run_total_model_footprint = 0
-
-                    for worker_result in result:
-                        run_total_max_memory += worker_result[1]
-                        run_total_model_footprint += worker_result[2]
-
-                    print(f'\n Worker returns: {result}')
-                    print(f' Max memory: {run_total_max_memory}')
-                    print(f' Total model memory footprint: {run_total_model_footprint}')
-
-                    # Collect and save timing and memory data, if we returned an OOM error, mark it in the results
-                    # and save the parameter set that caused the crash
-                    if False not in sum(list(result), []):
-                        
-                        results.data['summarization time (sec.)'].append(dT)
-                        results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
-                        results.data['max memory allocated (bytes)'].append(run_total_max_memory)
-                        results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
-                    else:
                         results.data['summarization time (sec.)'].append('OOM')
                         results.data['summarization rate (abstracts/sec.)'].append('OOM')
                         results.data['max memory allocated (bytes)'].append('OOM')
                         results.data['model memory footprint (bytes)'].append('OOM')
+                    
+                    # If we have not crashed on this parameter set before, do the run
+                    else:
 
-                        oom_parameter_sets.append((quantization, workers, batch_size))
+                        # start a counter to pick GPUs for jobs
+                        gpu_index = 0
 
-                results.save_result()
+                        # Instantiate pool with one member for each job we need to run
+                        pool = mp.Pool(
+                            processes = workers,
+                            maxtasksperchild = 1
+                        )
+
+                        # Start timer
+                        start = time.time()
+
+                        # Collector for returns from workers
+                        async_results = []
+
+                        # Loop on jobs for this run
+                        for i in list(range(0, workers)):
+
+                            # Pick GPU
+                            gpu = gpus[gpu_index]
+
+                            async_results.append(
+                                pool.apply_async(start_job,
+                                    args = (
+                                        i,
+                                        db_name,
+                                        user,
+                                        passwd,
+                                        host,
+                                        num_abstracts,
+                                        batches,
+                                        batch_size,
+                                        gpu_index,
+                                        gpu,
+                                        quantization
+                                    )
+                                )
+                            )
+
+                            # Increment GPU index - when the GPU index gets to one less than the total 
+                            # number of GPUs, reset it back to 0, otherwise increment it.
+                            if gpu_index == len(gpus) - 1:
+                                gpu_index = 0
+                            
+                            else:
+                                gpu_index += 1
+
+                        # Clean up
+                        pool.close()
+                        pool.join()
+
+                        # Stop the timer
+                        dT = time.time() - start
+
+                        # Get the results
+                        result = [async_result.get() for async_result in async_results]
+                        
+                        # Get model and max memory footprint across workers
+                        run_total_max_memory = 0
+                        run_total_model_footprint = 0
+
+                        for worker_result in result:
+                            run_total_max_memory += worker_result[1]
+                            run_total_model_footprint += worker_result[2]
+
+                        print(f'\n Worker returns: {result}')
+                        print(f' Max memory: {run_total_max_memory}')
+                        print(f' Total model memory footprint: {run_total_model_footprint}')
+
+                        # Collect and save timing and memory data, if we returned an OOM error, mark it in the results
+                        # and save the parameter set that caused the crash
+                        if False not in sum(list(result), []):
+                            results.data['summarization time (sec.)'].append(dT)
+                            results.data['summarization rate (abstracts/sec.)'].append((batches * batch_size * workers)/dT)
+                            results.data['max memory allocated (bytes)'].append(run_total_max_memory)
+                            results.data['model memory footprint (bytes)'].append(run_total_model_footprint)
+                        else:
+                            results.data['summarization time (sec.)'].append('OOM')
+                            results.data['summarization rate (abstracts/sec.)'].append('OOM')
+                            results.data['max memory allocated (bytes)'].append('OOM')
+                            results.data['model memory footprint (bytes)'].append('OOM')
+
+                            oom_parameter_sets.append((quantization, workers, batch_size))
+
+                    results.save_result()
 
     return True
 
