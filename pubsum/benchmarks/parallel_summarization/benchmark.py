@@ -13,7 +13,6 @@ def benchmark(
     resume: bool,
     results_dir: str,
     replicates: int,
-    batches: int,
     devices: List[str],
     workers: List[int],
     gpus: List[str],
@@ -27,10 +26,7 @@ def benchmark(
 
     # Set list of keys for the data we want to collect
     collection_vars = [
-        'abstracts',
-        'abstracts per worker',
         'replicate',
-        'batches',
         'device',
         'workers',
         'summarization time (sec.)',
@@ -89,16 +85,11 @@ def benchmark(
                 elif device == 'GPU':
                     threads_per_CPU_worker = None
 
-                # Calculate total abstracts needed for job
-                num_abstracts = batches * workers
-
                 # Print run parameters
                 print(f'\nParallel summarization:\n')
                 print(f' Replicate: {replicate}')
                 print(f' Device: {device}')
-                print(f' Workers: {workers}')
-                print(f' Batches: {batches}')
-                print(f' Abstracts: {num_abstracts}\n')
+                print(f' Workers: {workers}\n')
 
                 # If this is a CPU run and it's calling for more threads than we have, skip it
                 if device != 'GPU' and mp.cpu_count() < workers * threads_per_CPU_worker:
@@ -114,9 +105,6 @@ def benchmark(
 
                     # Collect data for run parameters
                     results.data['replicate'].append(replicate)
-                    results.data['abstracts per worker'].append(num_abstracts // workers)
-                    results.data['abstracts'].append(num_abstracts)
-                    results.data['batches'].append(batches)
                     results.data['workers'].append(workers)
                     results.data['device'].append(device)
 
@@ -176,9 +164,7 @@ def benchmark(
                                             db_name, 
                                             user, 
                                             passwd, 
-                                            host, 
-                                            batches, 
-                                            num_abstracts, 
+                                            host,
                                             device, 
                                             gpu_index, 
                                             gpu,
@@ -223,7 +209,7 @@ def benchmark(
                             if False not in sum(list(result), []):
                                 
                                 results.data['summarization time (sec.)'].append(dT)
-                                results.data['summarization rate (abstracts/sec.)'].append((num_abstracts)/dT)
+                                results.data['summarization rate (abstracts/sec.)'].append((workers)/dT)
                                 results.data['model memory footprint (bytes)'].append(total_model_footprint)
                                 results.data['max memory allocated (bytes)'].append(total_max_memory)
 
@@ -245,9 +231,7 @@ def start_job(
     db_name: str, 
     user: str, 
     passwd: str, 
-    host: str, 
-    batches: int, 
-    num_abstracts: int, 
+    host: str,  
     device: str, 
     gpu_index: int, 
     gpu: str,
@@ -275,40 +259,25 @@ def start_job(
         model, tokenizer, gen_cfg = start_llm(gpu=gpu)
 
         # Get an abstract to summarize
-        rows = helper_funcs.get_rows(
+        row = helper_funcs.get_rows(
             db_name=db_name, 
             user=user, 
             passwd=passwd, 
             host=host, 
-            num_abstracts=num_abstracts
+            num_abstracts=1
         )
 
-        batch_count = 0
+        # Get abstract text
+        abstract = row[0][1]
 
-        for n in range(batches):
-
-            batch_count += 1
-
-            if use_GPU == True:
-                print(f' {gpu} job {i}: summarizing batch {batch_count} of {batches}.')
-                
-            else:
-                print(f' CPU job {i} summarizing batch {batch_count} of {batches}')
-
-            # Get the batch
-            batch = rows[n:(n+1)]
-
-            # Get abstract texts for this batch
-            abstracts = [row[1] for row in batch]
-
-            # Do the summaries
-            summaries = helper_funcs.summarize(
-                abstracts=abstracts,
-                model=model,
-                tokenizer=tokenizer, 
-                gen_cfg=gen_cfg,
-                use_GPU=use_GPU
-            )
+        # Do the summary
+        summary = helper_funcs.summarize(
+            abstracts=[abstract],
+            model=model,
+            tokenizer=tokenizer, 
+            gen_cfg=gen_cfg,
+            use_GPU=use_GPU
+        )
 
     except torch.cuda.OutOfMemoryError as oom:
 
