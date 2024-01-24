@@ -32,11 +32,11 @@ def resume_run(
             # Zip the lists of data into tuples
             completed_runs = list(zip(*old_results))
 
-            print(f'Resuming benchmark with {len(completed_runs)} runs complete.')
+            print(f'Resuming benchmark with {len(completed_runs)} runs complete')
 
         # If we don't have data to resume from, call it a fresh start
         else:
-            print(f'No data to resume from, starting from scratch.')
+            print(f'No data to resume from, starting from scratch')
             completed_runs = []
 
     # If we are not resuming a previous run...
@@ -170,7 +170,7 @@ class Results:
                 results_df = pd.concat([old_results_df, results_df])
 
         else:
-            print('Clearing any old results.')
+            print('Clearing any old results')
 
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)

@@ -45,7 +45,7 @@ def benchmark(
     if replicate < replicates:
 
         # Connect to postgresql server
-        print('Connecting to SQL server.')
+        print('Connecting to SQL server')
         connection = psycopg2.connect(f'dbname={db_name} user={user} password={passwd} host={host}')
 
         # Make table for results
