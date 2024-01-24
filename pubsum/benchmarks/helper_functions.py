@@ -72,24 +72,32 @@ def get_rows(
     # Loop until we have num_abstracts non-empty rows to return. Note: ideally we would go back to
     # the article parsing script and not put empty abstracts into the SQL database. Let's do
     # that later, but this will work for now to get us were we want to go. Also, this is not
-    # being timed as part of the benchmark, so any inefficacy in selecting a few hundred abstracts
-    # is irrelevant
+    # being timed as part of the benchmark, so any inefficacy is irrelevant to the results
 
-    # Get 2x the number of rows we want
-    read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (num_abstracts*2,))
+    # On the first loop, the number of abstract to get is the total number we want
+    abstracts_remaining = num_abstracts
 
-    # Collect non-empty rows until we have enough
+    # Collector for result
     rows = []
 
-    for row in read_cursor:
+    # Loop until we have enough abstracts
+    while abstracts_remaining > 0:
 
-        abstract = row[1]
+        # Get abstracts
+        read_cursor.execute('SELECT * FROM abstracts ORDER BY random() LIMIT %s', (abstracts_remaining,))
 
-        if abstract != None:
-            rows.append(row)
+        # Loop on the returned abstracts
+        for row in read_cursor:
 
-        if len(rows) == num_abstracts:
-            break
+            # Get the abstract text
+            abstract = row[1]
+
+            # If we got a non-empty abstract, add the row to the result
+            if abstract != None:
+                rows.append(row)
+
+        # Update abstracts remaining
+        abstracts_remaining = num_abstracts - len(rows)
         
     read_cursor.close()
 
@@ -136,6 +144,9 @@ class Results:
 
     def __init__(self, results_dir: str, collection_vars: List[str]):
 
+        # Add the collection variable keys
+        self.collection_vars = collection_vars
+
         # Output file for results
         self.output_file = f'{results_dir}/results.csv'
 
@@ -143,7 +154,7 @@ class Results:
         self.data = {}
 
         # Empty list to data dict for each collection var
-        for collection_var in collection_vars:
+        for collection_var in self.collection_vars:
             self.data[collection_var] = []
 
     def save_result(self, overwrite: bool = False) -> None:
@@ -153,7 +164,7 @@ class Results:
 
         if overwrite == False:
 
-            # Read existing results if any and concatenate new results
+            # Read existing results, if any and concatenate new results
             if os.path.exists(self.output_file):
                 old_results_df = pd.read_csv(self.output_file)
                 results_df = pd.concat([old_results_df, results_df])
@@ -163,3 +174,9 @@ class Results:
 
         # Save results for run to csv
         results_df.to_csv(self.output_file, index = False)
+
+    def clear(self) -> None:
+
+        # Assign empty list for all collection vars
+        for collection_var in self.collection_vars:
+            self.data[collection_var] = []
