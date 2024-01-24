@@ -13,7 +13,6 @@ def benchmark(
     resume: bool, 
     results_dir: str, 
     replicates: int,
-    num_abstracts: int,
     device_map_strategies: List[str],
     db_name: str,
     user: str,
@@ -26,7 +25,6 @@ def benchmark(
     # Set list of keys for the data we want to collect
     collection_vars = [
         'replicate',
-        'abstracts',
         'device map strategy',
         'summarization time (sec.)',
         'summarization rate (abstracts/sec.)'
@@ -54,10 +52,23 @@ def benchmark(
         replicate_numbers
     )
 
+    # Instantiate results collector object
+    results = helper_funcs.Results(
+        results_dir=results_dir,
+        collection_vars=collection_vars
+    )
+
     if len(device_map_strategies) * len(replicate_numbers) == len(completed_runs):
-        print('Run is complete')
+        print('Benchmark is complete')
     
     else:
+
+        # Track previous device map, so that we only bother reloading the model
+        # when we need to switch device maps, since we are entering the first run
+        # set to None
+        previous_run_device_map = None
+        model = None
+        tokenizer = None
 
         # Loop on parameter sets
         for parameter_set in parameter_sets:
@@ -68,76 +79,79 @@ def benchmark(
                 # Unpack parameters from set
                 device_map_strategy, replicate = parameter_set
 
-                # Decide if we need to move encoding to GPU
-                if device_map_strategy != 'CPU only':
-                    use_GPU = True
-
-                else:
-                    use_GPU = False
-
                 print(f'\nHF device map strategy benchmark:\n')
                 print(f' Replicate: {replicate} of {replicates}')
                 print(f' Device map strategy: {device_map_strategy}')
 
-                # Instantiate results object for this run
-                results = helper_funcs.Results(
-                    results_dir=results_dir,
-                    collection_vars=collection_vars
-                )
+                # Check if we are switching device maps from the previous run
+                if device_map_strategy != previous_run_device_map:
+                    print(' Reinitializing model')
 
-                # Fire up the model for this run
-                model, tokenizer, gen_cfg = start_llm(device_map_strategy=device_map_strategy)
+                    # Get rid of old model and tokenizer from run, free up memory
+                    del model
+                    del tokenizer
+                    gc.collect()
+                    torch.cuda.empty_cache()
 
-                # Get rows from abstracts table
-                rows = helper_funcs.get_rows(
+                    # Decide if we need to move encoding to GPU
+                    if device_map_strategy != 'CPU only':
+                        use_GPU = True
+
+                    else:
+                        use_GPU = False
+
+                    # Fire up the model for this run
+                    model, tokenizer, gen_cfg = start_llm(device_map_strategy=device_map_strategy)
+
+                    # Update the previous device map for next iteration
+                    previous_run_device_map = device_map_strategy
+                
+                else:
+                    print(' Reusing model')
+
+                # Get row from abstracts table
+                row = helper_funcs.get_rows(
                     db_name=db_name, 
                     user=user, 
                     passwd=passwd, 
                     host=host, 
-                    num_abstracts=num_abstracts
+                    num_abstracts=1
                 )
 
-                # Do and time the summaries
+                # Get abstract text for this row
+                abstract = row[0][1]
+
+                # Do and time the summary
                 summarization_start = time.time()
 
-                # Loop on rows
-                row_count = 0
-
-                for row in rows:
-
-                    row_count += 1
-                    print(f' Summarizing abstract: {row_count} of {num_abstracts}')
-
-                    # Get abstract text for this row
-                    abstract = row[1]
-
-                    summary = helper_funcs.summarize(
-                        abstracts=[abstract], 
-                        model=model, 
-                        tokenizer=tokenizer, 
-                        gen_cfg=gen_cfg, 
-                        use_GPU=use_GPU
-                    )
+                summary = helper_funcs.summarize(
+                    abstracts=[abstract], 
+                    model=model, 
+                    tokenizer=tokenizer, 
+                    gen_cfg=gen_cfg, 
+                    use_GPU=use_GPU
+                )
 
                 dT = time.time() - summarization_start
 
                 # Collect results
                 results.data['replicate'].append(replicate)
-                results.data['abstracts'].append(num_abstracts)
                 results.data['device map strategy'].append(device_map_strategy)
                 results.data['summarization time (sec.)'].append(dT)
                 results.data['summarization rate (abstracts/sec.)'].append(1/dT)
 
-                # Save the result
-                results.save_result()
+                # Save the result and reinitialize collector every 5 runs
+                if replicate % 5 == 0:
+                    results.save_result()
+                    results.clear()
+                    
+                print(' Done')
 
-                # Get rid of model and tokenizer from run, free up memory
-                del model
-                del tokenizer
-                gc.collect()
-                torch.cuda.empty_cache()
-                
-                print(' Done.')
+        # Get rid of model and tokenizer from run, free up memory
+        del model
+        del tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
 
     return True
 
