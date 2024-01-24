@@ -68,8 +68,7 @@ if __name__ == "__main__":
                 helper_funcs=helper_funcs,
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/baseline_execute_time',
-                replicates=100,
-                num_abstracts=3,
+                replicates=300,
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
@@ -89,7 +88,6 @@ if __name__ == "__main__":
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
                 replicates=10,
-                num_abstracts=3,
                 device_map_strategies=[
                     'CPU only',
                     'multi-GPU',
@@ -116,14 +114,13 @@ if __name__ == "__main__":
                 resume=args.resume,
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_summarization',
                 replicates=5,
-                batches=3,
                 devices=[
                     'GPU',
                     'CPU: 1 thread per worker',
                     'CPU: 2 threads per worker',
                     'CPU: 4 threads per worker'
                 ],
-                workers=[1, 2, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20],
+                workers=[1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20],
                 gpus=conf.GPUS,
                 db_name=conf.DB_NAME,
                 user=conf.USER,
