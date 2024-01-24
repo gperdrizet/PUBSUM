@@ -14,15 +14,15 @@ def baseline_execution_plot(datafile: str) -> pd.DataFrame:
     data = pd.read_csv(datafile)
 
     # Get means of means
-    mean_total_time = (data['mean_total_time'].mean() / 3).round(1)
-    mean_summarization_time = (data['total_summarization_time'].mean() / 3).round(1)
-    mean_SQL_insert_time = (data['total_insert_time'].mean() / 3).round(3)
-    mean_SQL_load_time = (data['total_loading_time'].mean() / 3).round(2)
+    mean_replicate_time = (data['replicate_time'].mean()).round(1)
+    mean_summarization_time = (data['summarization_time'].mean()).round(1)
+    mean_insert_time = (data['insert_time'].mean()).round(3)
+    mean_load_time = (data['loading_time'].mean()).round(2)
 
     # Lists of plot parameters to loop on
     titles = ['Total', 'Summarization', 'SQL insert', 'SQL load']
-    data_types = ['mean_total_time', 'mean_summarization_time', 'mean_insert_time', 'mean_loading_time']
-    means = [mean_total_time, mean_summarization_time, mean_SQL_insert_time, mean_SQL_load_time]
+    data_types = ['replicate_time', 'summarization_time', 'insert_time', 'loading_time']
+    means = [mean_replicate_time, mean_summarization_time, mean_insert_time, mean_load_time]
     xlabels = ['seconds', 'seconds', 'seconds', 'seconds']
     xaxis_scales = [1, 1, 1, 1]
     xaxis_decimal_places = [0, 0, 2, 1]
@@ -81,20 +81,20 @@ def baseline_execution_pie(datafile: str) -> pd.DataFrame:
     data = pd.read_csv(datafile)
 
     # Get means
-    mean_summarization_time = (data['total_summarization_time'].mean() / 3).round(1)
-    mean_SQL_insert_time = (data['total_insert_time'].mean() / 3).round(3)
-    mean_SQL_load_time = (data['total_loading_time'].mean() / 3).round(2)
+    mean_summarization_time = data['summarization_time'].mean().round(1)
+    mean_insert_time = data['insert_time'].mean().round(3)
+    mean_load_time = data['loading_time'].mean().round(2)
 
     fig, axs = plt.subplots(1,1, figsize=(3.5, 3.5))
 
     axs.set_title('Mean run time per abstract')
 
     axs.pie(
-        [mean_summarization_time, mean_SQL_insert_time, mean_SQL_load_time],
+        [mean_summarization_time, mean_insert_time, mean_load_time],
         labels=[
             f'Summarization', 
-            f'SQL load', 
-            f'SQL insert'
+            f'SQL insert', 
+            f'SQL load'
         ],
         colors=['white', 'black', 'lightgray'],
         wedgeprops={'linewidth': 0.5, 'edgecolor': 'black'}
@@ -159,7 +159,7 @@ def parallel_summarization_plot(datafile):
     axs[0].set_title('Summarization rate')
     axs[0].set_xlabel('Concurrent worker processes')
     axs[0].set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs[0].set_yscale('log', base=2)
+    #axs[0].set_yscale('log', base=2)
     axs[0].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
@@ -184,7 +184,7 @@ def parallel_summarization_plot(datafile):
     axs[1].set_title('Memory use')
     axs[1].set_xlabel('Concurrent worker processes')
     axs[1].set_ylabel('Total max memory allocated\n(GB)')
-    axs[1].set_yscale('log', base=2)
+    #axs[1].set_yscale('log', base=2)
     axs[1].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
