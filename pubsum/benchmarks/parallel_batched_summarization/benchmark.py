@@ -97,7 +97,8 @@ def benchmark(
                     print(f' Model quantization: {quantization}')
                     print(f' Batch size: {batch_size}')
                     print(f' Batches: {batches}')
-                    print(f' Workers per GPU: {workers_per_gpu}\n')
+                    print(f' Workers per GPU: {workers_per_gpu}')
+                    print(f' Total workers: {workers}\n')
 
                     # Instantiate results object for this run
                     results = helper_funcs.Results(
@@ -110,7 +111,7 @@ def benchmark(
                     results.data['replicate'].append(replicate)
                     results.data['batches'].append(batches)
                     results.data['batch size'].append(batch_size)
-                    results.data['workers'].append(workers_per_gpu)
+                    results.data['workers'].append(workers)
                     results.data['workers per GPU'].append(workers_per_gpu)
                     results.data['quantization'].append(quantization)
 
