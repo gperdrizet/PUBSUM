@@ -78,11 +78,11 @@ def benchmark(
                 device, workers, replicate = parameter_set
 
                 # If this is a CPU run, extract the number of threads per worker
-                if device != 'GPU':
+                if 'GPU' not in device:
                     threads_per_CPU_worker = int(device.split(' ')[1])
 
                 # If its a GPU run, set threads per CPU worker to none
-                elif device == 'GPU':
+                elif 'GPU' in device:
                     threads_per_CPU_worker = None
 
                 # Print run parameters
@@ -92,7 +92,7 @@ def benchmark(
                 print(f' Workers: {workers}\n')
 
                 # If this is a CPU run and it's calling for more threads than we have, skip it
-                if device != 'GPU' and mp.cpu_count() < workers * threads_per_CPU_worker:
+                if 'GPU' not in device and mp.cpu_count() < workers * threads_per_CPU_worker:
                     print(f' Run will use more worker threads than total threads, skipping')
 
                 else:
@@ -125,9 +125,15 @@ def benchmark(
                     # If we have not crashed on this parameter set before, do the run
                     else:
 
-                        # If this is a GPU run, start a counter to pick GPUs for jobs
+                        # If this is a one GPU per job run, start a counter to pick GPUs for jobs
                         if device == 'GPU':
                             gpu_index = 0
+
+                        # If we are using the GPUs in sequential mode, pass that for 'gpu' and no
+                        # GPU index
+                        if device == 'GPU: sequential':
+                            gpu_index = None
+                            gpu = 'sequential'
 
                         # If this run is not using GPU(s), pass none for GPU related parameters,
                         # and get the number of CPU threads per worker called for.
@@ -136,7 +142,7 @@ def benchmark(
                             gpu = None
 
                         # Don't do the run if total CPU threads required is more than available
-                        if device == 'GPU' or mp.cpu_count() // workers >= threads_per_CPU_worker:
+                        if 'GPU' in device or mp.cpu_count() // workers >= threads_per_CPU_worker:
 
                             # Instantiate pool with one member for each job we need to run
                             pool = mp.Pool(
@@ -239,12 +245,16 @@ def start_job(
 ) -> List:
 
     try:
-        # Assign job to GPU if needed
+        # Assign job to specific GPU if needed
         if device == 'GPU':
             use_GPU = True
             torch.cuda.set_device(gpu_index)
-
             print(f' Job {i} starting on {gpu}')
+
+        # If running on GPUs in sequential mode, don't set a specific GPU
+        elif device == 'GPU: sequential':
+            use_GPU = True
+            print(f' Job {i} starting on GPUs in {gpu} mode')        
 
         # If this is not a GPU run, assign CPU threads
         # and start tracemalloc to monitor system memory
@@ -252,7 +262,6 @@ def start_job(
             use_GPU = False
             torch.set_num_threads(threads_per_CPU_worker)
             tracemalloc.start()
-
             print(f' Job {i} starting on CPU with {threads_per_CPU_worker} threads per worker')
         
         # Fire up the model for this run
@@ -290,7 +299,7 @@ def start_job(
         return [False, np.nan, np.nan]
     
     # Get peak memory for GPU or system for non-GPU jobs
-    if device == 'GPU':
+    if 'GPU' in device:
         max_memory = torch.cuda.max_memory_allocated()
 
     else:
