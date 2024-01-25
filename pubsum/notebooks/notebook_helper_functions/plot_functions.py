@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import notebook_helper_functions.data_analysis_functions as data_funcs
 from matplotlib.ticker import FormatStrFormatter
 from typing import List, Union
+from textwrap import wrap
 
 pd.options.mode.chained_assignment = None
 
@@ -13,35 +14,42 @@ def baseline_execution_plot(datafile: str) -> pd.DataFrame:
     # Load data
     data = pd.read_csv(datafile)
 
-    # Get means of means
+    # Get means
     mean_replicate_time = (data['replicate_time'].mean()).round(1)
     mean_summarization_time = (data['summarization_time'].mean()).round(1)
     mean_insert_time = (data['insert_time'].mean()).round(3)
     mean_load_time = (data['loading_time'].mean()).round(2)
 
     # Lists of plot parameters to loop on
-    titles = ['Total', 'Summarization', 'SQL insert', 'SQL load']
-    data_types = ['replicate_time', 'summarization_time', 'insert_time', 'loading_time']
-    means = [mean_replicate_time, mean_summarization_time, mean_insert_time, mean_load_time]
+    titles = ['Total', 'Summarization', 'SQL load', 'SQL insert']
+    data_types = ['replicate_time', 'summarization_time', 'loading_time', 'insert_time']
+    means = [mean_replicate_time, mean_summarization_time, mean_load_time, mean_insert_time]
+    mean_text_x_offsets = [0, 0, 0.1, 0]
     xlabels = ['seconds', 'seconds', 'seconds', 'seconds']
     xaxis_scales = [1, 1, 1, 1]
-    xaxis_decimal_places = [0, 0, 2, 1]
+    xaxis_decimal_places = [0, 0, 1, 2]
+
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
 
     # Set up plots
-    fig, axs = plt.subplots(1, 4, figsize=(14, 3.5), sharey=True, tight_layout=True)
+    fig, axs = plt.subplots(1, 4, figsize=(14, 4), sharey=True, tight_layout=True)
 
     # Add text to the figure
-    fig.suptitle('Run time')
-    fig.supxlabel('Sec.')
+    fig.suptitle('Unoptimized run time')
+    fig.supxlabel('seconds')
 
     # Loop on the lists of plot vars, counting the axis number
     axs_num = 0
 
-    for title, data_type, mean, xlabel, xaxis_scale, xaxis_decimals in zip(titles, data_types, means, xlabels, xaxis_scales, xaxis_decimal_places):
+    for title, data_type, mean, mean_text_x_offset, xlabel, xaxis_scale, xaxis_decimals in zip(titles, data_types, means, mean_text_x_offsets, xlabels, xaxis_scales, xaxis_decimal_places):
+
+        # Set tick font size
+        for label in (axs[axs_num].get_xticklabels() + axs[axs_num].get_yticklabels()):
+            label.set_fontsize(14)
 
         # Set plot titles and labels
         axs[axs_num].set_title(title)
-        #axs[axs_num].set_xlabel(xlabel)
         axs[axs_num].xaxis.set_major_formatter(FormatStrFormatter(f'%.{xaxis_decimals}f'))
 
         # Make the plot
@@ -54,20 +62,20 @@ def baseline_execution_plot(datafile: str) -> pd.DataFrame:
 
         # Set title inside plot area
         axs[axs_num].annotate(
-            f'mean = {mean}', 
-            xy=(0, 1),
+            f'mean = {mean} s', 
+            xy=(0 + mean_text_x_offset, 1),
             xytext=(12, -12),
             va='top',
             xycoords='axes fraction',
             textcoords='offset points',
-            fontsize=10
+            fontsize=14
         )
 
-        # Incrament to the next axis
+        # Increment to the next axis
         axs_num += 1
 
     # Set x label on first plot, common for all of the plots
-    axs[0].set_ylabel('Replicates (n)')
+    axs[0].set_ylabel('Abstracts (n)', fontsize=16)
 
     # Draw the plot
     plt.show()
@@ -85,9 +93,16 @@ def baseline_execution_pie(datafile: str) -> pd.DataFrame:
     mean_insert_time = data['insert_time'].mean().round(3)
     mean_load_time = data['loading_time'].mean().round(2)
 
-    fig, axs = plt.subplots(1,1, figsize=(3.5, 3.5))
+    fig, axs = plt.subplots(1,1, figsize=(4, 4))
+
+    # Set general font size
+    plt.rcParams['font.size'] = '14'
 
     axs.set_title('Mean run time per abstract')
+
+    # Set tick font size
+    for label in (axs.get_xticklabels() + axs.get_yticklabels()):
+        label.set_fontsize(12)
 
     axs.pie(
         [mean_summarization_time, mean_insert_time, mean_load_time],
@@ -102,64 +117,75 @@ def baseline_execution_pie(datafile: str) -> pd.DataFrame:
 
     plt.show
 
-def device_map_plot(datafile):
+def device_map_plot(datafile: str) -> pd.DataFrame:
 
     data = pd.read_csv(datafile)
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
 
     wide_data = data.pivot(index='replicate', columns='device map strategy', values='summarization rate (abstracts/min.)')
 
-    fig, axs = plt.subplots(1, 1, figsize=(7, 3.5), tight_layout=True)
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
+
+    fig, axs = plt.subplots(1, 1, figsize=(9, 4), tight_layout=True)
+
+    # Set tick font size
+    for label in (axs.get_xticklabels() + axs.get_yticklabels()):
+        label.set_fontsize(14)
 
     axs.set_title('Device map strategy benchmark')
     axs.set_xlabel('Huggingface device map')
     axs.set_ylabel('Summarization rate\n(abstracts/minute)')
     axs.boxplot(wide_data, labels=wide_data.columns)
 
-    return data, plt
+    plt.show()
 
-def parallel_summarization_plot(datafile):
+    return data
 
+def parallel_summarization_plot(
+    datafile: str,
+    unique_condition_columns: List[str],
+    oom_columns: List[str], 
+    str_columns: List[str], 
+    int_columns: List[str], 
+    float_columns: List[str],
+    oom_replacement_val: Union[str, int, float]
+) -> pd.DataFrame:
+
+    # Load data
     data = pd.read_csv(datafile)
 
-    OOM_columns = [
-        'summarization time (sec.)',
-        'summarization rate (abstracts/sec.)',
-        'max memory allocated (bytes)',
-        'model memory footprint (bytes)'
-    ]
+    # Clean out-of-memory errors and replace with user defined value
+    data = data_funcs.clean_out_of_memory_errors(
+        data=data, 
+        unique_condition_columns=unique_condition_columns,
+        oom_columns=oom_columns, 
+        str_columns=str_columns, 
+        int_columns=int_columns, 
+        float_columns=float_columns,
+        oom_replacement_val=oom_replacement_val
+    )
 
-    OOM = data[data['summarization time (sec.)'] == 'OOM']
-    OOM = OOM[['device', 'workers']]
-    OOM_conditions = OOM.to_numpy().tolist()
-
-    for OOM_column in OOM_columns:
-        for condition in OOM_conditions:
-
-            data[OOM_column].loc[
-                (data['device'] == condition[0]) &
-                (data['workers'] == condition[1])
-            ] = np.nan
-
-    data.dropna(inplace=True)
-
-    data['summarization time (sec.)'] = data['summarization time (sec.)'].astype(float)
-    data['summarization rate (abstracts/sec.)'] = data['summarization rate (abstracts/sec.)'].astype(float)
-    data['max memory allocated (bytes)'] = data['max memory allocated (bytes)'].astype(int)
-    data['model memory footprint (bytes)'] = data['model memory footprint (bytes)'].astype(int)
-
+    # Add some new columns with different units
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
     data['model memory footprint (GB)'] = data['model memory footprint (bytes)'] / 10 ** 9
 
-    devices = ['GPU', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
+    # Clean up any leftover NANs
+    data.dropna(axis=0, inplace=True)
 
-    fig, axs = plt.subplots(1, 2, figsize=(7, 3.5), tight_layout=True)
+    # Devices to plot data for
+    devices = ['GPU', 'GPU: sequential', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
+
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
+
+    # Set-up figure
+    fig, axs = plt.subplots(1, 2, figsize=(9.5, 4.5), tight_layout=True)
 
     axs[0].set_title('Summarization rate')
     axs[0].set_xlabel('Concurrent worker processes')
     axs[0].set_ylabel('Summarization rate\n(abstracts/minute)')
-    #axs[0].set_yscale('log', base=2)
     axs[0].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
@@ -180,11 +206,17 @@ def parallel_summarization_plot(datafile):
             label=device,
             linestyle='dotted'
         )
+    
+    # Add legend
+    axs[0].legend(loc='lower right', prop={'size': 9})
+    
+    # Set tick font size
+    for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
+        label.set_fontsize(14)
 
     axs[1].set_title('Memory use')
     axs[1].set_xlabel('Concurrent worker processes')
     axs[1].set_ylabel('Total max memory allocated\n(GB)')
-    #axs[1].set_yscale('log', base=2)
     axs[1].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
@@ -206,9 +238,16 @@ def parallel_summarization_plot(datafile):
             linestyle='dotted'
         )
 
-    plt.legend(loc='best')
+    # Add legend
+    axs[1].legend(loc='upper left', prop={'size': 9})
 
-    return data, plt
+    # Set tick font size
+    for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
+        label.set_fontsize(14)
+
+    plt.show()
+
+    return data
 
 def model_quantization_plot(
     datafile: str
@@ -221,6 +260,9 @@ def model_quantization_plot(
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
     data['model GPU memory footprint (GB)'] = data['model GPU memory footprint (bytes)'] / 10 ** 9
     data['max memory allocated (GB)'] = data['max memory allocated (bytes)'] / 10 ** 9
+
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
 
     # Set up the figure and axes array
     fig, axs = plt.subplots(2, 1, figsize=(14, 7), sharex=True, tight_layout=True)
@@ -245,7 +287,7 @@ def model_quantization_plot(
         va='top',
         xycoords='axes fraction',
         textcoords='offset points',
-        fontsize=14
+        fontsize=16
     )
 
     # Other labels
@@ -271,15 +313,22 @@ def model_quantization_plot(
         va='top',
         xycoords='axes fraction',
         textcoords='offset points',
-        fontsize=14
+        fontsize=16
     )
 
-    # Other labels
-    axs[1].set_ylabel('GPU memory (GB)')
-    axs[1].tick_params(axis='x', labelrotation=45)
+    # Format x axis labeling
+    xtick_labels = list(plot_data.columns)
+    labels = [ '\n'.join(wrap(label, 10)) for label in xtick_labels]
 
-    # Set x axis label
+    axs[1].set_xticklabels(labels)
+    axs[1].tick_params(axis='x', labelrotation=45)
+    axs[1].set_ylabel('GPU memory (GB)')
+
     fig.text(0.5, 0.04, 'Model quantization strategy', ha='center')
+
+    # Set tick font size
+    for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
+        label.set_fontsize(14)
 
     # Show the plot
     plt.show()
@@ -287,7 +336,7 @@ def model_quantization_plot(
     # Return the data
     return data
 
-def batch_summarization_plot(
+def batched_summarization_plot(
     datafile: str,
     unique_condition_columns: List[str],
     quantization_method: str,
@@ -296,7 +345,7 @@ def batch_summarization_plot(
     int_columns: List[str], 
     float_columns: List[str],
     oom_replacement_val: Union[str, int, float]
-):
+) -> pd.DataFrame:
 
     # Read data
     data = pd.read_csv(datafile)
@@ -319,8 +368,11 @@ def batch_summarization_plot(
     # Clean up any leftover NANs
     data.dropna(axis=0, inplace=True)
 
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
+
     # Set figure layout - first column is un-quantized data, second column is quantized data
-    fig, axs = plt.subplots(1, 2, figsize=(7, 3.5), tight_layout=True)
+    fig, axs = plt.subplots(1, 2, figsize=(9.5, 4.5), tight_layout=True)
 
     # Split quantized and unquantized data
     unquantized_data = data[data['quantization'] == 'none']
@@ -352,6 +404,10 @@ def batch_summarization_plot(
         label=quantization_method
     )
 
+    # Set tick font size
+    for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
+        label.set_fontsize(14)
+
     axs[1].set_title('Summarization rate')
     axs[1].set_xlabel('Batch size')
     axs[1].set_ylabel('abstracts/min.')
@@ -376,18 +432,23 @@ def batch_summarization_plot(
         label=quantization_method
     )
 
-    return data, plt
+    # Set tick font size
+    for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
+        label.set_fontsize(14)
+
+    plt.show()
+
+    return data
 
 def parallel_batched_summarization_plot(
     datafile: str,
     unique_condition_columns: List[str],
-    quantization_method: str,
     oom_columns: List[str],
     str_columns: List[str],
     int_columns: List[str],
     float_columns: List[str],
     oom_replacement_val: Union[str, int, float]
-):
+) -> pd.DataFrame:
 
     data = pd.read_csv(datafile)
 
@@ -420,7 +481,11 @@ def parallel_batched_summarization_plot(
     quantization_types = data['quantization'].unique()
     worker_nums = data['workers per GPU'].unique()
 
-    fig, axs = plt.subplots(2, 2, figsize=(7, 7), tight_layout=True)
+    # Set general font size
+    plt.rcParams['font.size'] = '14'
+
+    # Set-up figure and axis array
+    fig, axs = plt.subplots(2, 2, figsize=(8.5, 8.5), tight_layout=True)
 
     # Summarization rate plots
     axs_count = 0
@@ -441,7 +506,7 @@ def parallel_batched_summarization_plot(
 
             axs[0, axs_count].set_title(f'Model quantization: {quantization}')
             axs[0, axs_count].set_xlabel('Batch size')
-            axs[0, axs_count].set_ylabel('Summarization rate (abstracts/min.)')
+            axs[0, axs_count].set_ylabel('Summarization rate\n(abstracts/min.)')
 
             axs[0, axs_count].set_xlim([
                 (min_batch_size - (min_batch_size * axis_pad)), 
@@ -453,8 +518,8 @@ def parallel_batched_summarization_plot(
                 (max_summarization_rate + (max_summarization_rate * axis_pad))
             ])
             
-            axs[0, axs_count].set_xscale('log', base=2)
-            axs[0, axs_count].set_yscale('log', base=2)
+            # axs[0, axs_count].set_xscale('log', base=2)
+            # axs[0, axs_count].set_yscale('log', base=2)
             #axs[0, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
             axs[0, axs_count].errorbar(
@@ -465,6 +530,10 @@ def parallel_batched_summarization_plot(
                 label=workers,
                 linestyle='dotted'
             )
+
+            # Set tick font size
+            for label in (axs[0, axs_count].get_xticklabels() + axs[0, axs_count].get_yticklabels()):
+                label.set_fontsize(14)
 
         axs_count += 1
 
@@ -487,7 +556,7 @@ def parallel_batched_summarization_plot(
 
             axs[1, axs_count].set_title(f'Model quantization: {quantization}')
             axs[1, axs_count].set_xlabel('Batch size')
-            axs[1, axs_count].set_ylabel('Max allocated memory (GB)')
+            axs[1, axs_count].set_ylabel('Max allocated\nmemory (GB)')
 
             # axs[1, axs_count].hlines(
             #     y=(11.4 * 4), 
@@ -520,11 +589,17 @@ def parallel_batched_summarization_plot(
                 linestyle='dotted'
             )
 
+            # Set tick font size
+            for label in (axs[1, axs_count].get_xticklabels() + axs[1, axs_count].get_yticklabels()):
+                label.set_fontsize(14)
+
         axs_count += 1
 
     plt.legend(loc='upper left', title='Workers per GPU')
 
-    return data, plt
+    plt.show()
+
+    return data
 
 def sql_insert_plot(datafile):
 
