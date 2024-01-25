@@ -479,7 +479,7 @@ def parallel_batched_summarization_plot(
     axis_pad = 0.1
 
     quantization_types = data['quantization'].unique()
-    worker_nums = data['workers per GPU'].unique()
+    worker_nums = data['workers'].unique()
 
     # Set general font size
     plt.rcParams['font.size'] = '14'
@@ -496,7 +496,7 @@ def parallel_batched_summarization_plot(
 
         for workers in worker_nums:
 
-            plot_data = quantization_type_data[quantization_type_data['workers per GPU'] == workers]
+            plot_data = quantization_type_data[quantization_type_data['workers'] == workers]
 
             mean = plot_data.groupby(['batch size']).mean()
             mean.reset_index(inplace=True)
@@ -531,6 +531,9 @@ def parallel_batched_summarization_plot(
                 linestyle='dotted'
             )
 
+            # Add legend
+            axs[0, axs_count].legend(loc='lower right', title='Workers')
+
             # Set tick font size
             for label in (axs[0, axs_count].get_xticklabels() + axs[0, axs_count].get_yticklabels()):
                 label.set_fontsize(14)
@@ -546,7 +549,7 @@ def parallel_batched_summarization_plot(
 
         for workers in worker_nums:
 
-            plot_data = quantization_type_data[quantization_type_data['workers per GPU'] == workers]
+            plot_data = quantization_type_data[quantization_type_data['workers'] == workers]
 
             mean = plot_data.groupby(['batch size']).mean()
             mean.reset_index(inplace=True)
@@ -589,13 +592,14 @@ def parallel_batched_summarization_plot(
                 linestyle='dotted'
             )
 
+            # Add legend
+            axs[1, axs_count].legend(loc='lower right', title='Workers')
+
             # Set tick font size
             for label in (axs[1, axs_count].get_xticklabels() + axs[1, axs_count].get_yticklabels()):
                 label.set_fontsize(14)
 
         axs_count += 1
-
-    plt.legend(loc='upper left', title='Workers per GPU')
 
     plt.show()
 
