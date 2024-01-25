@@ -408,6 +408,9 @@ def batched_summarization_plot(
     for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
         label.set_fontsize(14)
 
+    # Add legend
+    axs[0].legend(loc='lower right', title='Quantization', title_fontsize=14, prop={'size': 12})
+
     axs[1].set_title('Summarization rate')
     axs[1].set_xlabel('Batch size')
     axs[1].set_ylabel('abstracts/min.')
@@ -435,6 +438,9 @@ def batched_summarization_plot(
     # Set tick font size
     for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
         label.set_fontsize(14)
+
+    # Add legend
+    axs[1].legend(loc='upper right', title='Quantization', title_fontsize=14, prop={'size': 12})
 
     plt.show()
 
@@ -605,7 +611,7 @@ def parallel_batched_summarization_plot(
 
     return data
 
-def sql_insert_plot(datafile):
+def sql_insert_plot(datafile: str) -> pd.DataFrame:
 
     data = pd.read_csv(datafile)
     data['insert rate (abstracts/millisecond)'] = data['insert rate (abstracts/sec.)'] / 1000
@@ -613,7 +619,10 @@ def sql_insert_plot(datafile):
 
     insert_strategies = ['execute_many', 'execute_batch', 'execute_values', 'mogrify', 'stringIO']
 
-    fig, axs = plt.subplots(1, 1, figsize=(3.5, 3.5), tight_layout=True)
+    # Set general font size
+    plt.rcParams['font.size'] = '16'
+
+    fig, axs = plt.subplots(1, 1, figsize=(5.5, 5.5), tight_layout=True)
 
     axs.set_title('SQL insert benchmark')
     axs.set_xlabel('Thousand abstracts inserted')
@@ -641,6 +650,13 @@ def sql_insert_plot(datafile):
             linestyle='dotted'
         )
 
-    plt.legend(loc='center right')
+    # Set tick font size
+    for label in (axs.get_xticklabels() + axs.get_yticklabels()):
+        label.set_fontsize(14)
 
-    return data, plt
+    # Add legend
+    plt.legend(loc='upper left', prop={'size': 12})
+
+    plt.show()
+
+    return data
