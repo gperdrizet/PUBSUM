@@ -216,7 +216,7 @@ def parallel_summarization_plot(
 
     axs[1].set_title('Memory use')
     axs[1].set_xlabel('Concurrent worker processes')
-    axs[1].set_ylabel('Total max memory allocated\n(GB)')
+    axs[1].set_ylabel('Max memory allocated\n(GB)')
     axs[1].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
     for device in devices:
@@ -491,7 +491,7 @@ def parallel_batched_summarization_plot(
     plt.rcParams['font.size'] = '14'
 
     # Set-up figure and axis array
-    fig, axs = plt.subplots(2, 2, figsize=(8.5, 8.5), tight_layout=True)
+    fig, axs = plt.subplots(2, 2, figsize=(8.5, 8.5), sharex='col', sharey='row', tight_layout=True)
 
     # Summarization rate plots
     axs_count = 0
@@ -510,23 +510,20 @@ def parallel_batched_summarization_plot(
             std = plot_data.groupby(['batch size']).std()
             std.reset_index(inplace=True)
 
-            axs[0, axs_count].set_title(f'Model quantization: {quantization}')
-            axs[0, axs_count].set_xlabel('Batch size')
-            axs[0, axs_count].set_ylabel('Summarization rate\n(abstracts/min.)')
+            # Set title inside plot area
+            axs[0, axs_count].annotate(
+                f'Model quantization: {quantization}', 
+                xy=(0, 1),
+                xytext=(12, -12),
+                va='top',
+                xycoords='axes fraction',
+                textcoords='offset points',
+                fontsize=14
+            )
 
-            axs[0, axs_count].set_xlim([
-                (min_batch_size - (min_batch_size * axis_pad)), 
-                (max_batch_size + (max_batch_size * axis_pad))
-            ])
-            
-            axs[0, axs_count].set_ylim([(
-                min_summarization_rate - (min_summarization_rate * axis_pad)), 
-                (max_summarization_rate + (max_summarization_rate * axis_pad))
-            ])
-            
-            # axs[0, axs_count].set_xscale('log', base=2)
-            # axs[0, axs_count].set_yscale('log', base=2)
-            #axs[0, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+            # Only add y axis label on plot in first column
+            if axs_count == 0:
+                axs[0, axs_count].set_ylabel('Summarization rate\n(abstracts/min.)')
 
             axs[0, axs_count].errorbar(
                 mean['batch size'], 
@@ -536,6 +533,16 @@ def parallel_batched_summarization_plot(
                 label=workers,
                 linestyle='dotted'
             )
+
+            axs[0, axs_count].set_xlim([
+                (min_batch_size - (min_batch_size * axis_pad)), 
+                (max_batch_size + (max_batch_size * axis_pad))
+            ])
+            
+            axs[0, axs_count].set_ylim([
+                (min_summarization_rate - (min_summarization_rate * axis_pad)), 
+                (max_summarization_rate + (max_summarization_rate * (axis_pad*2)))
+            ])
 
             # Add legend
             axs[0, axs_count].legend(loc='lower right', title='Workers')
@@ -563,31 +570,22 @@ def parallel_batched_summarization_plot(
             std = plot_data.groupby(['batch size']).std()
             std.reset_index(inplace=True)
 
-            axs[1, axs_count].set_title(f'Model quantization: {quantization}')
+            # Set title inside plot area
+            axs[1, axs_count].annotate(
+                f'Model quantization: {quantization}', 
+                xy=(0, 1),
+                xytext=(12, -12),
+                va='top',
+                xycoords='axes fraction',
+                textcoords='offset points',
+                fontsize=14
+            )
+
             axs[1, axs_count].set_xlabel('Batch size')
-            axs[1, axs_count].set_ylabel('Max allocated\nmemory (GB)')
 
-            # axs[1, axs_count].hlines(
-            #     y=(11.4 * 4), 
-            #     xmin=(min_batch_size - (min_batch_size * axis_pad)), 
-            #     xmax=(max_batch_size + (max_batch_size * axis_pad)), 
-            #     linewidth=0.5,
-            #     color='red'
-            # )
-
-            axs[1, axs_count].set_xlim([
-                (min_batch_size - (min_batch_size * axis_pad)), 
-                (max_batch_size + (max_batch_size * axis_pad))
-            ])
-            
-            axs[1, axs_count].set_ylim([
-                (min_memory - (min_memory * axis_pad)), 
-                (max_memory + (max_memory * axis_pad))
-            ])
-            
-            #axs[1, axs_count].set_xscale('log', base=2)
-            #axs[1, axs_count].set_yscale('log', base=2)
-            #axs[1, axs_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+            # Only add y axis label on plot in first column
+            if axs_count == 0:
+                axs[1, axs_count].set_ylabel('Max allocated\nmemory (GB)')
 
             axs[1, axs_count].errorbar(
                 mean['batch size'], 
@@ -597,6 +595,16 @@ def parallel_batched_summarization_plot(
                 label=workers,
                 linestyle='dotted'
             )
+
+            axs[1, axs_count].set_xlim([
+                (min_batch_size - (min_batch_size * axis_pad)), 
+                (max_batch_size + (max_batch_size * axis_pad))
+            ])
+            
+            axs[1, axs_count].set_ylim([
+                (min_memory - (min_memory * axis_pad)), 
+                (max_memory + (max_memory * (axis_pad*2)))
+            ])
 
             # Add legend
             axs[1, axs_count].legend(loc='lower right', title='Workers')
