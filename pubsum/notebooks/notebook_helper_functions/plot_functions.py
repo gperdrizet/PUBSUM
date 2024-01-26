@@ -378,16 +378,14 @@ def batched_summarization_plot(
     unquantized_data = data[data['quantization'] == 'none']
     quantized_data = data[data['quantization'] == quantization_method]
 
-    axs[0].set_title('GPU memory use')
+    axs[0].set_title('Summarization rate')
     axs[0].set_xlabel('Batch size')
-    axs[0].set_ylabel('max memory allocated (GB)')
-    # axs[0].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
-    # axs[0].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
+    axs[0].set_ylabel('abstracts/min.')
 
     axs[0].errorbar(
         unquantized_data['batch size'].unique(), 
-        unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
-        yerr=unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
+        unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
+        yerr=unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
         capsize=5,
         marker='o', 
         linestyle='none',
@@ -396,8 +394,8 @@ def batched_summarization_plot(
 
     axs[0].errorbar(
         quantized_data['batch size'].unique(), 
-        quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
-        yerr=quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
+        quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
+        yerr=quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
         capsize=5,
         marker='o', 
         linestyle='none',
@@ -409,16 +407,18 @@ def batched_summarization_plot(
         label.set_fontsize(14)
 
     # Add legend
-    axs[0].legend(loc='lower right', title='Quantization', title_fontsize=14, prop={'size': 12})
+    axs[0].legend(loc='upper right', title='Quantization', title_fontsize=14, prop={'size': 12})
 
-    axs[1].set_title('Summarization rate')
+    axs[1].set_title('GPU memory use')
     axs[1].set_xlabel('Batch size')
-    axs[1].set_ylabel('abstracts/min.')
+    axs[1].set_ylabel('max memory allocated (GB)')
+    # axs[1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
+    # axs[1].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
 
     axs[1].errorbar(
         unquantized_data['batch size'].unique(), 
-        unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
-        yerr=unquantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
+        unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
+        yerr=unquantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
         capsize=5,
         marker='o', 
         linestyle='none',
@@ -427,8 +427,8 @@ def batched_summarization_plot(
 
     axs[1].errorbar(
         quantized_data['batch size'].unique(), 
-        quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').mean()['summarization rate (abstracts/min.)'],
-        yerr=quantized_data[['batch size', 'summarization rate (abstracts/min.)']].groupby('batch size').std()['summarization rate (abstracts/min.)'] * 3,
+        quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').mean()['max memory allocated (GB)'],
+        yerr=quantized_data[['batch size', 'max memory allocated (GB)']].groupby('batch size').std()['max memory allocated (GB)'] * 3,
         capsize=5,
         marker='o', 
         linestyle='none',
@@ -440,7 +440,7 @@ def batched_summarization_plot(
         label.set_fontsize(14)
 
     # Add legend
-    axs[1].legend(loc='upper right', title='Quantization', title_fontsize=14, prop={'size': 12})
+    axs[1].legend(loc='lower right', title='Quantization', title_fontsize=14, prop={'size': 12})
 
     plt.show()
 
