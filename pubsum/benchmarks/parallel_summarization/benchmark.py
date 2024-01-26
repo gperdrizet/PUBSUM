@@ -144,6 +144,12 @@ def benchmark(
                         # Don't do the run if total CPU threads required is more than available
                         if 'GPU' in device or mp.cpu_count() // workers >= threads_per_CPU_worker:
 
+                            # If this is a CPU run, start tracemalloc to monitor
+                            # system memory use. Getting this from torch does
+                            # not give a sane value.
+                            if 'CPU' in device:
+                                tracemalloc.start()
+
                             # Instantiate pool with one member for each job we need to run
                             pool = mp.Pool(
                                 processes = workers,
@@ -198,13 +204,25 @@ def benchmark(
                             # Get the results
                             result = [async_result.get() for async_result in async_results]
 
-                            # Get model and max memory footprint across workers
-                            total_max_memory = 0
+                            # Get total model memory footprint
                             total_model_footprint = 0
 
                             for worker_result in result:
-                                total_max_memory += worker_result[1]
                                 total_model_footprint += worker_result[2]
+
+                            # Get max memory footprint across workers
+                            total_max_memory = 0
+
+                            # For GPU jobs
+                            if 'GPU' in device:
+                                for worker_result in result:
+                                    total_max_memory += worker_result[1]
+
+                            # And for CPU jobs
+                            elif 'CPU' in device:
+                                memory, max_memory = tracemalloc.get_traced_memory()
+                                total_max_memory = max_memory * 1024
+                                tracemalloc.stop()
 
                             print(f'\n Worker returns: {result}')
                             print(f' Total max memory: {round(total_max_memory / (1024**3), 2)}')
@@ -228,7 +246,6 @@ def benchmark(
                                 oom_parameter_sets.append((device, workers))
                             
                     results.save_result()
-
     return True
 
 
@@ -261,7 +278,7 @@ def start_job(
         else:
             use_GPU = False
             torch.set_num_threads(threads_per_CPU_worker)
-            tracemalloc.start()
+            #tracemalloc.start()
             print(f' Job {i} starting on CPU with {threads_per_CPU_worker} threads per worker')
         
         # Fire up the model for this run
@@ -298,14 +315,17 @@ def start_job(
         print(f'{rte}')
         return [False, np.nan, np.nan]
     
-    # Get peak memory for GPU or system for non-GPU jobs
+    # Get peak memory for GPU, return None for CPU because
+    # we are tracking system memory around the apply_async
+    # call rather than using torch.cuda 
     if 'GPU' in device:
         max_memory = torch.cuda.max_memory_allocated()
 
     else:
-        memory, max_memory = tracemalloc.get_traced_memory()
-        max_memory = max_memory * 1024
-        tracemalloc.stop()
+    #     memory, max_memory = tracemalloc.get_traced_memory()
+    #     max_memory = max_memory * 1024
+    #     tracemalloc.stop()
+        max_memory = None
 
     model_memory = model.get_memory_footprint()
 
