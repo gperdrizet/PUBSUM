@@ -143,7 +143,10 @@ def device_map_plot(datafile: str) -> pd.DataFrame:
     return data
 
 def parallel_summarization_plot(
-    datafile: str,
+    data_file: str,
+    plot_vars: List[str],
+    plot_devices: List[str],
+    legend_entries: List[str],
     unique_condition_columns: List[str],
     oom_columns: List[str], 
     str_columns: List[str], 
@@ -153,7 +156,7 @@ def parallel_summarization_plot(
 ) -> pd.DataFrame:
 
     # Load data
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Clean out-of-memory errors and replace with user defined value
     data = data_funcs.clean_out_of_memory_errors(
@@ -174,78 +177,98 @@ def parallel_summarization_plot(
     # Clean up any leftover NANs
     data.dropna(axis=0, inplace=True)
 
-    # Devices to plot data for
-    devices = ['GPU', 'GPU: sequential', 'CPU: 1 thread per worker', 'CPU: 2 threads per worker', 'CPU: 4 threads per worker']
+    # Dict to hold titles etc for possible plots we might need to make for this dataset
+    plot_text = {
+        'summarization rate (abstracts/min.)': {'title': 'Summarization rate', 'ylabel': 'abstracts/minute'},
+        'max memory allocated (GB)': {'title': 'Max memory allocated', 'ylabel': 'gigabytes'},
+        'model memory footprint (GB)': {'title': 'Model memory footprint', 'ylabel': 'gigabytes'}
+    }
 
     # Set general font size
     plt.rcParams['font.size'] = '16'
 
-    # Set-up figure
-    fig, axs = plt.subplots(1, 2, figsize=(9.5, 4.5), tight_layout=True)
+    # Figure setup - first determine how many cols we need
+    fig_cols = len(plot_vars)
 
-    axs[0].set_title('Summarization rate')
-    axs[0].set_xlabel('Concurrent worker processes')
-    axs[0].set_ylabel('Summarization rate\n(abstracts/minute)')
-    axs[0].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    # Then, derive the width of the fig from the number of cols
+    fig_width = 4.5 * fig_cols
 
-    for device in devices:
+    # Finally, make the figure and axes array
+    fig, axs = plt.subplots(1, fig_cols, figsize=(fig_width, 4.5), tight_layout=True)
 
-        plot_data = data[data['device'] == device]
+    # Fix the edge case where we only are drawing one plot - in that situation plt returns a single
+    # axis object instead of a list with one member causing axis indexing in our plot loop to fail.
+    if fig_cols == 1:
+        axs = [axs]
 
-        mean = plot_data.groupby(['device', 'workers']).mean()
-        mean.reset_index(inplace=True)
+    # Loop on variables passed to plot and make each plot
+    ax_count = 0
+    for plot_var in plot_vars:
+
+        # Set title and axs labels
+        axs[ax_count].set_title(plot_text[plot_var]['title'])
+        axs[ax_count].set_ylabel(plot_text[plot_var]['ylabel'])
+        axs[ax_count].set_xlabel('Concurrent worker processes')
+        axs[ax_count].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+
+        for label in (axs[ax_count].get_xticklabels() + axs[ax_count].get_yticklabels()):
+            label.set_fontsize(14)
+
+        # Loop on devices for plot and plot each one
+        for device in plot_devices:
+
+            # Pull data for that device
+            plot_data = data[data['device'] == device]
+
+            # Get means
+            mean = plot_data.groupby(['device', 'workers']).mean()
+            mean.reset_index(inplace=True)
+            
+            # Get standard deviations
+            std = plot_data.groupby(['device', 'workers']).std()
+            std.reset_index(inplace=True)
+
+            # Decide if we need error bars or just scatter
+            if sum(std[plot_var]) > 0:
+
+                # Plot the data
+                axs[ax_count].errorbar(
+                    mean['workers'], 
+                    mean[plot_var], 
+                    yerr=std[plot_var],
+                    capsize=5,
+                    label=device,
+                    linestyle='dotted'
+                )
+
+            else:
+
+                # Plot the data
+                axs[ax_count].plot(
+                    mean['workers'], 
+                    mean[plot_var], 
+                    #yerr=std[plot_var],
+                    #capsize=5,
+                    label=device,
+                    linestyle='solid'
+                )
         
-        std = plot_data.groupby(['device', 'workers']).std()
-        std.reset_index(inplace=True)
+        # Add legend
+        axs[ax_count].legend(legend_entries, loc='lower right', prop={'size': 9})
 
-        axs[0].errorbar(
-            mean['workers'], 
-            mean['summarization rate (abstracts/min.)'], 
-            yerr=std['summarization rate (abstracts/min.)'],
-            capsize=5,
-            label=device,
-            linestyle='dotted'
-        )
-    
-    # Add legend
-    axs[0].legend(loc='lower right', prop={'size': 9})
-    
-    # Set tick font size
-    for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
-        label.set_fontsize(14)
+        # Move to the next plot
+        ax_count += 1
 
-    axs[1].set_title('Memory use')
-    axs[1].set_xlabel('Concurrent worker processes')
-    axs[1].set_ylabel('Max memory allocated\n(GB)')
-    axs[1].xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-
-    for device in devices:
-
-        plot_data = data[data['device'] == device]
-
-        mean = plot_data.groupby(['device', 'workers']).mean()
-        mean.reset_index(inplace=True)
-        
-        std = plot_data.groupby(['device', 'workers']).std()
-        std.reset_index(inplace=True)
-
-        axs[1].errorbar(
-            mean['workers'], 
-            mean['max memory allocated (GB)'], 
-            yerr=std['max memory allocated (GB)'],
-            capsize=5,
-            label=device,
-            linestyle='dotted'
-        )
-
-    # Add legend
-    axs[1].legend(loc='upper left', prop={'size': 9})
-
-    # Set tick font size
-    for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
-        label.set_fontsize(14)
-
+    # Draw the plot
     plt.show()
+
+    # Make summary table(s)
+    for plot_var in plot_vars:
+        print(f'{plot_text[plot_var]["title"]} ({plot_text[plot_var]["ylabel"]})')
+        table = data[data['device'].isin(plot_devices)]
+        table = table.groupby(['device', 'workers'])[plot_var].mean().round(2)
+        table = table.unstack()
+        print(f'{table}\n')
 
     return data
 
@@ -491,7 +514,7 @@ def parallel_batched_summarization_plot(
     plt.rcParams['font.size'] = '14'
 
     # Set-up figure and axis array
-    fig, axs = plt.subplots(2, 2, figsize=(8.5, 8.5), sharex='col', sharey='row', tight_layout=True)
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8), sharex='col', sharey='row', tight_layout=True)
 
     # Summarization rate plots
     axs_count = 0
