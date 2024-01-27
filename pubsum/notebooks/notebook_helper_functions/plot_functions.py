@@ -140,6 +140,10 @@ def device_map_plot(datafile: str) -> pd.DataFrame:
 
     plt.show()
 
+    table = data.groupby(['device map strategy'])['summarization rate (abstracts/min.)'].mean().round(2)
+    table = pd.DataFrame({'device map strategy':table.index, 'mean summarization rate (abstracts/min.)':table.values})
+    print(table)
+
     return data
 
 def parallel_summarization_plot(
@@ -356,6 +360,10 @@ def model_quantization_plot(
     # Show the plot
     plt.show()
 
+    # Print summary table
+    table = data.groupby(['quantization strategy'])[['summarization rate (abstracts/min.)', 'model GPU memory footprint (GB)', 'max memory allocated (GB)']].mean().round(2)
+    print(table)
+
     # Return the data
     return data
 
@@ -465,7 +473,15 @@ def batched_summarization_plot(
     # Add legend
     axs[1].legend(loc='lower right', title='Quantization', title_fontsize=14, prop={'size': 12})
 
+    # Draw the plot
     plt.show()
+
+    # Make and print a summary table
+    table = data.groupby(['batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
+    table = table.unstack()
+    table = table.astype(str)
+    table.replace('<NA>', 'nan', inplace=True)
+    print(table)
 
     return data
 
@@ -638,7 +654,16 @@ def parallel_batched_summarization_plot(
 
         axs_count += 1
 
+    # Draw plot
     plt.show()
+
+    # Make and print summary table
+    print('Mean max memory allocated (GB)')
+    table = data[data['workers per GPU'] <= 3].groupby(['workers per GPU', 'batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
+    table = table.unstack()
+    table = table.astype(str)
+    table.replace('<NA>', 'nan', inplace=True)
+    print(table)
 
     return data
 
@@ -688,6 +713,13 @@ def sql_insert_plot(datafile: str) -> pd.DataFrame:
     # Add legend
     plt.legend(loc='upper left', prop={'size': 12})
 
+    # Draw plot
     plt.show()
+
+    # Make and print summary table
+    print('Mean insert rate (abstracts/millisecond)')
+    table = data.groupby(['abstracts', 'insert strategy'])['insert rate (abstracts/millisecond)'].mean().round(2)
+    table = table.unstack()
+    print(table)
 
     return data
