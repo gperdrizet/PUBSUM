@@ -20,7 +20,8 @@ def benchmark(
     db_name: str, 
     user: str, 
     passwd: str, 
-    host: str
+    host: str,
+    file_name: str = 'results.csv'
 ) -> bool:
     
     print(f'\nRunning data parallel, batched summarization benchmark. Resume = {resume}.')
@@ -52,7 +53,8 @@ def benchmark(
         resume=resume, 
         results_dir=results_dir,
         collection_vars=collection_vars,
-        unique_collection_vars=unique_collection_vars
+        unique_collection_vars=unique_collection_vars,
+        file_name=file_name
     )
 
     # Construct parameter sets
@@ -82,7 +84,7 @@ def benchmark(
                 if parameter_set not in completed_runs:
 
                     # Unpack parameters from set
-                    quantization, workers, batch_size, replicate = parameter_set
+                    quantization, batch_size, workers, replicate = parameter_set
 
                     # Calculate total abstracts needed for job
                     num_abstracts = batches * batch_size
@@ -98,7 +100,8 @@ def benchmark(
                     # Instantiate results object for this run
                     results = helper_funcs.Results(
                         results_dir=results_dir,
-                        collection_vars=collection_vars
+                        collection_vars=collection_vars,
+                        file_name=file_name
                     )
 
                     # Collect data for run parameters

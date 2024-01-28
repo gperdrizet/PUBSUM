@@ -8,7 +8,8 @@ def resume_run(
     resume: str, 
     results_dir: str, 
     collection_vars: List[str], 
-    unique_collection_vars: List[str]
+    unique_collection_vars: List[str],
+    file_name: str = 'results.csv'
 ) -> list:
 
     '''Reads old data and collects the completed conditions 
@@ -18,9 +19,9 @@ def resume_run(
     if resume == 'True':
 
         # Read existing results if any
-        if os.path.exists(f'{results_dir}/results.csv'):
+        if os.path.exists(f'{results_dir}/{file_name}'):
 
-            old_results_df = pd.read_csv(f'{results_dir}/results.csv')
+            old_results_df = pd.read_csv(f'{results_dir}/{file_name}')
 
             # Make a list of lists containing the data the requested
             # columns in the old results dataframe
@@ -142,13 +143,13 @@ class Results:
     '''Class to hold objects and methods for
     collection of results'''
 
-    def __init__(self, results_dir: str, collection_vars: List[str]):
+    def __init__(self, results_dir: str, collection_vars: List[str], file_name: str = 'results.csv'):
 
         # Add the collection variable keys
         self.collection_vars = collection_vars
 
         # Output file for results
-        self.output_file = f'{results_dir}/results.csv'
+        self.output_file = f'{results_dir}/{file_name}'
 
         # Create dict for data
         self.data = {}

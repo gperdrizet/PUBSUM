@@ -116,6 +116,7 @@ if __name__ == "__main__":
                 replicates=5,
                 devices=[
                     'GPU',
+                    'GPU: sequential',
                     'CPU: 1 thread per worker',
                     'CPU: 2 threads per worker',
                     'CPU: 4 threads per worker'
@@ -197,14 +198,23 @@ if __name__ == "__main__":
                 results_dir=f'{conf.BENCHMARK_DIR}/parallel_batched_summarization',
                 replicates=3,
                 batches=3,
-                batch_size_lists=[[1, 2, 4, 8, 16, 27, 28, 29, 30], [1, 2, 4, 8, 9, 10, 11], [1, 2, 3]],
-                workers_per_gpu_lists=[[1], [2], [3]],
+                batch_size_lists=[
+                    [1, 2, 4, 8, 16, 32],
+                    [27, 28, 29, 30],
+                    [10, 12, 14]
+                ],
+                worker_count_lists=[[1, 2, 3, 4, 5, 6],[1],[2]],
                 gpus=conf.GPUS,
-                quantization_strategy_lists=[['none'], ['none'], ['none']],
+                quantization_strategy_lists=[
+                    ['none', 'four bit '],
+                    ['none'],
+                    ['none']
+                ],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
                 passwd=conf.PASSWD,
-                host=conf.HOST
+                host=conf.HOST,
+                file_name='single_GPU_results.csv'
             )
         )
 
