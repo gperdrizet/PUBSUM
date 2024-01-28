@@ -9,10 +9,10 @@ from textwrap import wrap
 
 pd.options.mode.chained_assignment = None
 
-def baseline_execution_plot(datafile: str) -> pd.DataFrame:
+def baseline_execution_plot(data_file: str) -> pd.DataFrame:
     
     # Load data
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Get means
     mean_replicate_time = (data['replicate_time'].mean()).round(1)
@@ -83,10 +83,10 @@ def baseline_execution_plot(datafile: str) -> pd.DataFrame:
     # return the data, incase we want to do something else with it
     return data
 
-def baseline_execution_pie(datafile: str) -> pd.DataFrame:
+def baseline_execution_pie(data_file: str) -> pd.DataFrame:
 
     # Load data
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Get means
     mean_summarization_time = data['summarization_time'].mean().round(1)
@@ -117,11 +117,13 @@ def baseline_execution_pie(datafile: str) -> pd.DataFrame:
 
     plt.show
 
-def device_map_plot(datafile: str) -> pd.DataFrame:
+def device_map_plot(
+    data_file: str, 
+    show_table: bool ) -> pd.DataFrame:
 
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
+
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
-
     wide_data = data.pivot(index='replicate', columns='device map strategy', values='summarization rate (abstracts/min.)')
 
     # Set general font size
@@ -140,14 +142,16 @@ def device_map_plot(datafile: str) -> pd.DataFrame:
 
     plt.show()
 
-    table = data.groupby(['device map strategy'])['summarization rate (abstracts/min.)'].mean().round(2)
-    table = pd.DataFrame({'device map strategy':table.index, 'mean summarization rate (abstracts/min.)':table.values})
-    print(table)
+    if show_table == True:
+        table = data.groupby(['device map strategy'])['summarization rate (abstracts/min.)'].mean().round(2)
+        table = pd.DataFrame({'device map strategy':table.index, 'mean summarization rate (abstracts/min.)':table.values})
+        print(table)
 
     return data
 
 def parallel_summarization_plot(
     data_file: str,
+    show_table: bool,
     plot_vars: List[str],
     plot_devices: List[str],
     legend_entries: List[str],
@@ -156,8 +160,7 @@ def parallel_summarization_plot(
     str_columns: List[str], 
     int_columns: List[str], 
     float_columns: List[str],
-    oom_replacement_val: Union[str, int, float]
-) -> pd.DataFrame:
+    oom_replacement_val: Union[str, int, float]) -> pd.DataFrame:
 
     # Load data
     data = pd.read_csv(data_file)
@@ -267,21 +270,22 @@ def parallel_summarization_plot(
     plt.show()
 
     # Make summary table(s)
-    for plot_var in plot_vars:
-        print(f'{plot_text[plot_var]["title"]} ({plot_text[plot_var]["ylabel"]})')
-        table = data[data['device'].isin(plot_devices)]
-        table = table.groupby(['device', 'workers'])[plot_var].mean().round(2)
-        table = table.unstack()
-        print(f'{table}\n')
+    if show_table == True:
+        for plot_var in plot_vars:
+            print(f'{plot_text[plot_var]["title"]} ({plot_text[plot_var]["ylabel"]})')
+            table = data[data['device'].isin(plot_devices)]
+            table = table.groupby(['device', 'workers'])[plot_var].mean().round(2)
+            table = table.unstack()
+            print(f'{table}\n')
 
     return data
 
 def model_quantization_plot(
-    datafile: str
-) -> pd.DataFrame:
+    data_file: str,
+    show_table: bool) -> pd.DataFrame:
 
     # Load data
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Add some derived columns with different units
     data['summarization rate (abstracts/min.)'] = data['summarization rate (abstracts/sec.)'] * 60
@@ -292,7 +296,8 @@ def model_quantization_plot(
     plt.rcParams['font.size'] = '16'
 
     # Set up the figure and axes array
-    fig, axs = plt.subplots(2, 1, figsize=(14, 7), sharex=True, tight_layout=True)
+    fig, axs = plt.subplots(2, 1, figsize=(14, 7), sharex=True, tight_layout=True, gridspec_kw = {'wspace':0, 'hspace':0})
+    #plt.subplots_adjust(hspace=0)
 
     # Format the data for boxplot
     plot_data = data[['replicate', 'quantization strategy', 'summarization rate (abstracts/min.)']]
@@ -361,25 +366,26 @@ def model_quantization_plot(
     plt.show()
 
     # Print summary table
-    table = data.groupby(['quantization strategy'])[['summarization rate (abstracts/min.)', 'model GPU memory footprint (GB)', 'max memory allocated (GB)']].mean().round(2)
-    print(table)
+    if show_table == True:
+        table = data.groupby(['quantization strategy'])[['summarization rate (abstracts/min.)', 'model GPU memory footprint (GB)', 'max memory allocated (GB)']].mean().round(2)
+        print(table)
 
     # Return the data
     return data
 
 def batched_summarization_plot(
-    datafile: str,
+    data_file: str,
+    show_table: bool,
     unique_condition_columns: List[str],
     quantization_method: str,
     oom_columns: List[str], 
     str_columns: List[str], 
     int_columns: List[str], 
     float_columns: List[str],
-    oom_replacement_val: Union[str, int, float]
-) -> pd.DataFrame:
+    oom_replacement_val: Union[str, int, float]) -> pd.DataFrame:
 
     # Read data
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Clean out-of-memory errors and replace with user defined value
     data = data_funcs.clean_out_of_memory_errors(
@@ -442,7 +448,7 @@ def batched_summarization_plot(
 
     axs[1].set_title('GPU memory use')
     axs[1].set_xlabel('Batch size')
-    axs[1].set_ylabel('max memory allocated (GB)')
+    axs[1].set_ylabel('gigabytes')
     # axs[1].hlines(y=11.4, xmin=-0.95, xmax=8, linewidth=1, color='red')
     # axs[1].hlines(y=3132600320 / 10 ** 9, xmin=-0.95, xmax=8, linewidth=1, color='y')
 
@@ -477,25 +483,26 @@ def batched_summarization_plot(
     plt.show()
 
     # Make and print a summary table
-    table = data.groupby(['batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
-    table = table.unstack()
-    table = table.astype(str)
-    table.replace('<NA>', 'nan', inplace=True)
-    print(table)
+    if show_table == True:
+        table = data.groupby(['batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
+        table = table.unstack()
+        table = table.astype(str)
+        table.replace('<NA>', 'nan', inplace=True)
+        print(table)
 
     return data
 
 def parallel_batched_summarization_plot(
-    datafile: str,
+    data_file: str,
+    show_table: bool,
     unique_condition_columns: List[str],
     oom_columns: List[str],
     str_columns: List[str],
     int_columns: List[str],
     float_columns: List[str],
-    oom_replacement_val: Union[str, int, float]
-) -> pd.DataFrame:
+    oom_replacement_val: Union[str, int, float]) -> pd.DataFrame:
 
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
 
     # Clean out-of-memory errors and replace with user defined value
     data = data_funcs.clean_out_of_memory_errors(
@@ -530,7 +537,7 @@ def parallel_batched_summarization_plot(
     plt.rcParams['font.size'] = '14'
 
     # Set-up figure and axis array
-    fig, axs = plt.subplots(2, 2, figsize=(8, 8), sharex='col', sharey='row', tight_layout=True)
+    fig, axs = plt.subplots(2, 2, figsize=(7, 7), sharex='col', sharey='row', tight_layout=True, gridspec_kw = {'wspace':0, 'hspace':0})
 
     # Summarization rate plots
     axs_count = 0
@@ -549,16 +556,7 @@ def parallel_batched_summarization_plot(
             std = plot_data.groupby(['batch size']).std()
             std.reset_index(inplace=True)
 
-            # Set title inside plot area
-            axs[0, axs_count].annotate(
-                f'Model quantization: {quantization}', 
-                xy=(0, 1),
-                xytext=(12, -12),
-                va='top',
-                xycoords='axes fraction',
-                textcoords='offset points',
-                fontsize=14
-            )
+            axs[0, axs_count].set_title(f'Quantization: {quantization}')
 
             # Only add y axis label on plot in first column
             if axs_count == 0:
@@ -572,16 +570,13 @@ def parallel_batched_summarization_plot(
                 label=workers,
                 linestyle='dotted'
             )
-
-            axs[0, axs_count].set_xlim([
-                (min_batch_size - (min_batch_size * axis_pad)), 
-                (max_batch_size + (max_batch_size * axis_pad))
-            ])
             
-            axs[0, axs_count].set_ylim([
-                (min_summarization_rate - (min_summarization_rate * axis_pad)), 
-                (max_summarization_rate + (max_summarization_rate * (axis_pad*2)))
-            ])
+            # Set x axis range
+            axs[0, axs_count].set_xlim(min_batch_size - 1, max_batch_size + 1)
+
+            # Set y axis range
+            y_range = max_summarization_rate - min_summarization_rate
+            axs[0, axs_count].set_ylim(min_summarization_rate - (y_range * 0.1), max_summarization_rate + (y_range * 0.1))
 
             # Add legend
             axs[0, axs_count].legend(loc='lower right', title='Workers')
@@ -609,17 +604,6 @@ def parallel_batched_summarization_plot(
             std = plot_data.groupby(['batch size']).std()
             std.reset_index(inplace=True)
 
-            # Set title inside plot area
-            axs[1, axs_count].annotate(
-                f'Model quantization: {quantization}', 
-                xy=(0, 1),
-                xytext=(12, -12),
-                va='top',
-                xycoords='axes fraction',
-                textcoords='offset points',
-                fontsize=14
-            )
-
             axs[1, axs_count].set_xlabel('Batch size')
 
             # Only add y axis label on plot in first column
@@ -635,15 +619,22 @@ def parallel_batched_summarization_plot(
                 linestyle='dotted'
             )
 
-            axs[1, axs_count].set_xlim([
-                (min_batch_size - (min_batch_size * axis_pad)), 
-                (max_batch_size + (max_batch_size * axis_pad))
-            ])
+            # axs[1, axs_count].set_xlim([
+            #     0,#(min_batch_size - (min_batch_size * axis_pad)), 
+            #     (max_batch_size + (max_batch_size * axis_pad))
+            # ])
             
-            axs[1, axs_count].set_ylim([
-                (min_memory - (min_memory * axis_pad)), 
-                (max_memory + (max_memory * (axis_pad*2)))
-            ])
+            # axs[1, axs_count].set_ylim([
+            #     (min_memory - (min_memory * axis_pad)), 
+            #     (max_memory + (max_memory * axis_pad))
+            # ])
+
+            # Set x axis range
+            axs[1, axs_count].set_xlim(min_batch_size - 1, max_batch_size + 1)
+
+            # Set y axis range
+            y_range = max_memory - min_memory
+            axs[1, axs_count].set_ylim(min_memory - (y_range * 0.1), max_memory + (y_range * 0.1))
 
             # Add legend
             axs[1, axs_count].legend(loc='lower right', title='Workers')
@@ -658,18 +649,21 @@ def parallel_batched_summarization_plot(
     plt.show()
 
     # Make and print summary table
-    print('Mean max memory allocated (GB)')
-    table = data[data['workers per GPU'] <= 3].groupby(['workers per GPU', 'batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
-    table = table.unstack()
-    table = table.astype(str)
-    table.replace('<NA>', 'nan', inplace=True)
-    print(table)
+    if show_table == True:
+        print('Mean max memory allocated (GB)')
+        table = data[data['workers'] <= 6].groupby(['workers', 'batch size', 'quantization'])[['max memory allocated (GB)', 'summarization rate (abstracts/min.)']].mean().round(1)
+        table = table.unstack()
+        table = table.astype(str)
+        table.replace('<NA>', 'nan', inplace=True)
+        print(table)
 
     return data
 
-def sql_insert_plot(datafile: str) -> pd.DataFrame:
+def sql_insert_plot(
+    data_file: str,
+    show_table: bool) -> pd.DataFrame:
 
-    data = pd.read_csv(datafile)
+    data = pd.read_csv(data_file)
     data['insert rate (abstracts/millisecond)'] = data['insert rate (abstracts/sec.)'] / 1000
     data['thousand abstracts'] = data['abstracts'] / 1000
 
@@ -717,9 +711,10 @@ def sql_insert_plot(datafile: str) -> pd.DataFrame:
     plt.show()
 
     # Make and print summary table
-    print('Mean insert rate (abstracts/millisecond)')
-    table = data.groupby(['abstracts', 'insert strategy'])['insert rate (abstracts/millisecond)'].mean().round(2)
-    table = table.unstack()
-    print(table)
+    if show_table == True:
+        print('Mean insert rate (abstracts/millisecond)')
+        table = data.groupby(['abstracts', 'insert strategy'])['insert rate (abstracts/millisecond)'].mean().round(2)
+        table = table.unstack()
+        print(table)
 
     return data
