@@ -14,7 +14,7 @@ def benchmark(
     replicates: int,
     batches: int,
     batch_size_lists: List[List[int]],
-    workers_per_gpu_lists: List[List[int]],
+    worker_count_lists: List[List[int]],
     gpus: List[str],
     quantization_strategy_lists: List[List[str]],
     db_name: str, 
@@ -32,7 +32,6 @@ def benchmark(
         'replicate',
         'batch size',
         'workers',
-        'workers per GPU',
         'quantization',
         'summarization time (sec.)',
         'summarization rate (abstracts/sec.)',
@@ -43,8 +42,8 @@ def benchmark(
     # Subset of collection vars which are sufficient to uniquely identify each run
     unique_collection_vars = [
         'quantization',
-        'workers per GPU',
         'batch size',
+        'workers',
         'replicate'
     ]
 
@@ -57,13 +56,13 @@ def benchmark(
     )
 
     # Construct parameter sets
-    for batch_sizes, workers_per_gpu, quantization_strategies in zip(batch_size_lists, workers_per_gpu_lists, quantization_strategy_lists):
+    for batch_sizes, worker_counts, quantization_strategies in zip(batch_size_lists, worker_count_lists, quantization_strategy_lists):
         replicate_numbers = list(range(1, replicates + 1))
 
         parameter_sets = itertools.product(
             quantization_strategies,
-            workers_per_gpu,
             batch_sizes,
+            worker_counts,
             replicate_numbers
         )
 
@@ -71,7 +70,7 @@ def benchmark(
         # (quantization, workers, batch_size) - replicate number omitted
         oom_parameter_sets = []
 
-        if len(quantization_strategies) * len(workers_per_gpu) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
+        if len(quantization_strategies) * len(worker_counts) * len(batch_sizes) * len(replicate_numbers) == len(completed_runs):
             print('Run is complete')
         
         else:
@@ -83,13 +82,10 @@ def benchmark(
                 if parameter_set not in completed_runs:
 
                     # Unpack parameters from set
-                    quantization, workers_per_gpu, batch_size, replicate = parameter_set
+                    quantization, workers, batch_size, replicate = parameter_set
 
                     # Calculate total abstracts needed for job
                     num_abstracts = batches * batch_size
-
-                    # Calculate total workers
-                    workers = workers_per_gpu * len(gpus)
 
                     # Print run parameters
                     print(f'\nParallel batched summarization:\n')
@@ -97,7 +93,6 @@ def benchmark(
                     print(f' Model quantization: {quantization}')
                     print(f' Batch size: {batch_size}')
                     print(f' Batches: {batches}')
-                    print(f' Workers per GPU: {workers_per_gpu}')
                     print(f' Total workers: {workers}\n')
 
                     # Instantiate results object for this run
@@ -112,7 +107,6 @@ def benchmark(
                     results.data['batches'].append(batches)
                     results.data['batch size'].append(batch_size)
                     results.data['workers'].append(workers)
-                    results.data['workers per GPU'].append(workers_per_gpu)
                     results.data['quantization'].append(quantization)
 
                     # Then, check to see if this parameter set has caused an
