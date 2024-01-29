@@ -531,7 +531,6 @@ def parallel_batched_summarization_plot(
     axis_pad = 0.1
 
     quantization_types = data['quantization'].unique()
-    worker_nums = data['workers'].unique()
 
     # Set general font size
     plt.rcParams['font.size'] = '14'
@@ -545,6 +544,7 @@ def parallel_batched_summarization_plot(
     for quantization in quantization_types:
         quantization_type_data = data[data['quantization'] == quantization].copy()
         quantization_type_data.drop('quantization', axis=1, inplace=True)
+        worker_nums = quantization_type_data['workers'].unique()
 
         for workers in worker_nums:
 
@@ -568,7 +568,8 @@ def parallel_batched_summarization_plot(
                 yerr=std['summarization rate (abstracts/min.)'],
                 capsize=2.5,
                 label=workers,
-                linestyle='dotted'
+                linestyle='dotted',
+                marker='o'
             )
             
             # Set x axis range
