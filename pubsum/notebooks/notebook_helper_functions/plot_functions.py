@@ -494,6 +494,7 @@ def batched_summarization_plot(
 
 def parallel_batched_summarization_plot(
     data_file: str,
+    logx: bool,
     show_table: bool,
     unique_condition_columns: List[str],
     oom_columns: List[str],
@@ -528,7 +529,6 @@ def parallel_batched_summarization_plot(
     min_summarization_rate = min(data['summarization rate (abstracts/min.)'])
     max_memory = max(data['max memory allocated (GB)'])
     min_memory = min(data['max memory allocated (GB)'])
-    axis_pad = 0.1
 
     quantization_types = data['quantization'].unique()
 
@@ -566,14 +566,18 @@ def parallel_batched_summarization_plot(
                 mean['batch size'], 
                 mean['summarization rate (abstracts/min.)'], 
                 yerr=std['summarization rate (abstracts/min.)'],
-                capsize=2.5,
+                capsize=5,
                 label=workers,
                 linestyle='dotted',
                 marker='o'
             )
             
             # Set x axis range
-            axs[0, axs_count].set_xlim(min_batch_size - 1, max_batch_size + 1)
+            axs[0, axs_count].set_xlim(min_batch_size - 5, max_batch_size + 5)
+
+            # Log2 x
+            if logx == True:
+                axs[0, axs_count].set_xscale('log', base=2)
 
             # Set y axis range
             y_range = max_summarization_rate - min_summarization_rate
@@ -594,6 +598,7 @@ def parallel_batched_summarization_plot(
     for quantization in quantization_types:
         quantization_type_data = data[data['quantization'] == quantization].copy()
         quantization_type_data.drop('quantization', axis=1, inplace=True)
+        worker_nums = quantization_type_data['workers'].unique()
 
         for workers in worker_nums:
 
@@ -615,23 +620,18 @@ def parallel_batched_summarization_plot(
                 mean['batch size'], 
                 mean['max memory allocated (GB)'], 
                 yerr=std['max memory allocated (GB)'],
-                capsize=2.5,
+                capsize=5,
                 label=workers,
-                linestyle='dotted'
+                linestyle='dotted',
+                marker = 'o'
             )
 
-            # axs[1, axs_count].set_xlim([
-            #     0,#(min_batch_size - (min_batch_size * axis_pad)), 
-            #     (max_batch_size + (max_batch_size * axis_pad))
-            # ])
-            
-            # axs[1, axs_count].set_ylim([
-            #     (min_memory - (min_memory * axis_pad)), 
-            #     (max_memory + (max_memory * axis_pad))
-            # ])
-
             # Set x axis range
-            axs[1, axs_count].set_xlim(min_batch_size - 1, max_batch_size + 1)
+            axs[1, axs_count].set_xlim(min_batch_size - 5, max_batch_size + 5)
+
+            # Log2 x
+            if logx == True:
+                axs[1, axs_count].set_xscale('log', base=2)
 
             # Set y axis range
             y_range = max_memory - min_memory
