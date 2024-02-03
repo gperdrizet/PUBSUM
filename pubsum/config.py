@@ -61,6 +61,12 @@ PASSWD = secrets.passwd
 WORKUNIT_SIZE = 10000
 NUM_WORKERS = 16
 
+###########################
+# Optimization test stuff #
+###########################
+
+OPTIMIZATION_DIR = f'{PROJECT_ROOT_PATH}/optimization/'
+
 ######################
 # Benchmarking stuff #
 ######################
@@ -69,5 +75,4 @@ NUM_WORKERS = 16
 BENCHMARK_DIR = f'{PROJECT_ROOT_PATH}/benchmarks/'
 
 # Available GPUs
-#GPUS = [f'cuda:{i}' for i in range(torch.cuda.device_count())]
 GPUS = ['cuda:0']#, 'cuda:1'] #, 'cuda:2', 'cuda:3']
