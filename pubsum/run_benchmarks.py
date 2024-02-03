@@ -199,16 +199,47 @@ if __name__ == "__main__":
                 replicates=3,
                 batches=3,
                 batch_size_lists=[
-                    [1, 2, 4, 8, 16, 32],
-                    [27, 28, 29, 30],
-                    [10, 12, 14]
+                    [1, 2, 4, 8, 16, 28, 29, 30],         # none, 1
+                    [1, 2, 4, 7, 8, 9],                   # none, 2 
+                    [1, 2],                               # none, 3
+                    [1],                                  # none, 4
+                    [1, 2, 4, 8, 16, 32, 64, 83, 84, 85], # four bit, 1
+                    [1, 2, 4, 8, 16, 33, 34, 35],         # four bit, 2
+                    [1, 2, 4, 8, 16, 18, 19, 20],         # four bit, 3
+                    [1, 2, 4, 8, 10, 11, 12],             # four bit, 4  
+                    [1, 2, 4, 5, 6, 7],                   # four bit, 5
+                    [1, 2, 3, 4],                         # four bit, 6
+                    [1, 2, 3],                            # four bit, 7
+                    [1]                                   # four bit, 8 
                 ],
-                worker_count_lists=[[1, 2, 3, 4, 5, 6],[1],[2]],
+                worker_count_lists=[
+                    [1],
+                    [2],
+                    [3],
+                    [4],
+                    [1],
+                    [2],
+                    [3],
+                    [4],
+                    [5],
+                    [6],
+                    [7],
+                    [8]
+                ],
                 gpus=conf.GPUS,
                 quantization_strategy_lists=[
-                    ['none', 'four bit '],
                     ['none'],
-                    ['none']
+                    ['none'],
+                    ['none'],
+                    ['none'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit'],
+                    ['four bit']
                 ],
                 db_name=conf.DB_NAME,
                 user=conf.USER,
