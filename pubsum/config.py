@@ -75,4 +75,4 @@ OPTIMIZATION_DIR = f'{PROJECT_ROOT_PATH}/optimization/'
 BENCHMARK_DIR = f'{PROJECT_ROOT_PATH}/benchmarks/'
 
 # Available GPUs
-GPUS = ['cuda:0']#, 'cuda:1'] #, 'cuda:2', 'cuda:3']
+GPUS = ['cuda:0', 'cuda:1'] #, 'cuda:2', 'cuda:3']
