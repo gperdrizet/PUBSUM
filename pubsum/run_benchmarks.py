@@ -3,12 +3,12 @@ import config as conf
 import benchmarks.helper_functions as helper_funcs
 import benchmarks.baseline_execute_time.benchmark as baseline_execute
 import benchmarks.sql_insert.benchmark as sql
-import benchmarks.huggingface_device_map.benchmark as device_map
+# import benchmarks.huggingface_device_map.benchmark as device_map
 import benchmarks.model_quantization.benchmark as quantization
 import benchmarks.parallel_summarization.benchmark as parallel
-import benchmarks.batched_summarization.benchmark as batched_summarization
+# import benchmarks.batched_summarization.benchmark as batched_summarization
 import benchmarks.parallel_batched_summarization.benchmark as parallel_batched
-import benchmarks.optimized_execute_time as optimized_execute
+# import benchmarks.optimized_execute_time as optimized_execute
 from multiprocessing import Process, Queue
 
 if __name__ == "__main__":
@@ -19,10 +19,10 @@ if __name__ == "__main__":
 
     arguments = [
         ['--baseline_execute', 'Run MVP load, summarize, insert benchmark?'],
-        ['--hf_device_map', 'Run huggingface device map benchmark?'],
+        #['--hf_device_map', 'Run huggingface device map benchmark?'],
         ['--parallel_summarization', 'Run data parallel summarization benchmark?'],
         ['--model_quantization', 'Run model quantization benchmark?'],
-        ['--batched_summarization', 'Run batched summarization benchmark?'],
+        #['--batched_summarization', 'Run batched summarization benchmark?'],
         ['--parallel_batched_summarization', 'Run data parallel batched summarization benchmark?'],
         ['--sql_insert', 'Run sql insert benchmark?'],
         #['--optimized_execute', 'Run optimized load, summarize, insert benchmark?'],
