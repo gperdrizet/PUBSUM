@@ -79,32 +79,32 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-    # Huggingface device map strategy for summarization benchmark
-    if args.hf_device_map == 'True' or args.run_all == 'True':
+    # # Huggingface device map strategy for summarization benchmark
+    # if args.hf_device_map == 'True' or args.run_all == 'True':
 
-        p = Process(target=device_map.benchmark,
-            kwargs=dict(
-                helper_funcs=helper_funcs,
-                resume=args.resume,
-                results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
-                replicates=10,
-                device_map_strategies=[
-                    'CPU only',
-                    'multi-GPU',
-                    'single GPU',
-                    'balanced',
-                    #'balanced_low_0',
-                    'sequential'
-                ],
-                db_name=conf.DB_NAME,
-                user=conf.USER,
-                passwd=conf.PASSWD,
-                host=conf.HOST
-            )
-        )
+    #     p = Process(target=device_map.benchmark,
+    #         kwargs=dict(
+    #             helper_funcs=helper_funcs,
+    #             resume=args.resume,
+    #             results_dir=f'{conf.BENCHMARK_DIR}/huggingface_device_map',
+    #             replicates=10,
+    #             device_map_strategies=[
+    #                 'CPU only',
+    #                 'multi-GPU',
+    #                 'single GPU',
+    #                 'balanced',
+    #                 #'balanced_low_0',
+    #                 'sequential'
+    #             ],
+    #             db_name=conf.DB_NAME,
+    #             user=conf.USER,
+    #             passwd=conf.PASSWD,
+    #             host=conf.HOST
+    #         )
+    #     )
 
-        p.start()
-        p.join()
+    #     p.start()
+    #     p.join()
 
     # Data parallel summarization benchmark
     if args.parallel_summarization == 'True' or args.run_all == 'True':
@@ -167,27 +167,27 @@ if __name__ == "__main__":
         p.start()
         p.join()
 
-    # Batched summarization benchmark
-    if args.batched_summarization == 'True' or args.run_all == 'True':
+    # # Batched summarization benchmark
+    # if args.batched_summarization == 'True' or args.run_all == 'True':
 
-        p = Process(target=batched_summarization.benchmark,
-            kwargs=dict(
-                helper_funcs=helper_funcs,
-                resume=args.resume,
-                results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
-                replicates=3,
-                batches=3,
-                batch_size_lists=[[1, 2, 4, 8, 16],[27, 28, 29, 30], [32, 64, 81, 82, 83]],
-                quantization_strategy_lists=[['none', 'four bit nf4'], ['none'], ['four bit nf4']],
-                db_name=conf.DB_NAME,
-                user=conf.USER,
-                passwd=conf.PASSWD,
-                host=conf.HOST
-            )
-        )
+    #     p = Process(target=batched_summarization.benchmark,
+    #         kwargs=dict(
+    #             helper_funcs=helper_funcs,
+    #             resume=args.resume,
+    #             results_dir=f'{conf.BENCHMARK_DIR}/batched_summarization',
+    #             replicates=3,
+    #             batches=3,
+    #             batch_size_lists=[[1, 2, 4, 8, 16],[27, 28, 29, 30], [32, 64, 81, 82, 83]],
+    #             quantization_strategy_lists=[['none', 'four bit nf4'], ['none'], ['four bit nf4']],
+    #             db_name=conf.DB_NAME,
+    #             user=conf.USER,
+    #             passwd=conf.PASSWD,
+    #             host=conf.HOST
+    #         )
+    #     )
 
-        p.start()
-        p.join()
+    #     p.start()
+    #     p.join()
 
     # Data parallel batched summarization benchmark
     if args.parallel_batched_summarization == 'True' or args.run_all == 'True':
